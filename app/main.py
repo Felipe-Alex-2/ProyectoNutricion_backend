@@ -19,11 +19,16 @@ logger = logging.getLogger("api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure tables are created if not running with migrations or in tests
+    # Ensure tables and seed data (roles, permissions) are initialized
     try:
-        Base.metadata.create_all(bind=engine)
+        from init_sprint1_db import init_db
+        init_db()
     except Exception as exc:
-        logger.warning(f"Note: Database table auto-creation skipped or deferred: {exc}")
+        logger.warning(f"Note: Database auto-init skipped or deferred: {exc}")
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception:
+            pass
     yield
 
 
