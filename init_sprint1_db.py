@@ -9,27 +9,41 @@ from app.models.patient_link import PatientNutritionistLink
 
 def init_db():
     print("Running database initialization and migration...")
-    insp = inspect(engine)
+    import time
+    for attempt in range(1, 11):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+                print("Database connection successfully established.")
+                break
+        except Exception as e:
+            if attempt == 10:
+                print(f"Failed to connect to database after 10 attempts: {e}")
+                raise e
+            print(f"Waiting for database to be ready (attempt {attempt}/10)...")
+            time.sleep(2)
 
     # 1. Create all non-existing tables
     Base.metadata.create_all(bind=engine)
     print("Base metadata create_all completed.")
 
     # 2. Check and alter 'users' table columns if needed
-    existing_user_cols = [c['name'] for c in insp.get_columns('users')]
-    with engine.connect() as conn:
-        if 'phone' not in existing_user_cols:
-            print("Adding column 'phone' to 'users' table...")
-            conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(50);"))
-            conn.commit()
-        if 'role_id' not in existing_user_cols:
-            print("Adding column 'role_id' to 'users' table...")
-            conn.execute(text("ALTER TABLE users ADD COLUMN role_id VARCHAR(50) DEFAULT 'CLIENTE';"))
-            conn.commit()
-        if 'tenant_id' not in existing_user_cols:
-            print("Adding column 'tenant_id' to 'users' table...")
-            conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36);"))
-            conn.commit()
+    insp = inspect(engine)
+    if 'users' in insp.get_table_names():
+        existing_user_cols = [c['name'] for c in insp.get_columns('users')]
+        with engine.connect() as conn:
+            if 'phone' not in existing_user_cols:
+                print("Adding column 'phone' to 'users' table...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(50);"))
+                conn.commit()
+            if 'role_id' not in existing_user_cols:
+                print("Adding column 'role_id' to 'users' table...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN role_id VARCHAR(50) DEFAULT 'CLIENTE';"))
+                conn.commit()
+            if 'tenant_id' not in existing_user_cols:
+                print("Adding column 'tenant_id' to 'users' table...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36);"))
+                conn.commit()
 
     db = SessionLocal()
     try:
