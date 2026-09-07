@@ -1,6 +1,6 @@
 import sys
 from sqlalchemy import text, inspect
-from app.database import engine, Base, SessionLocal
+from app.database import get_engine, Base, get_session_local
 from app.models.tenant import Tenant
 from app.models.rbac import Role, Permission, RolePermission
 from app.models.user import User
@@ -10,9 +10,10 @@ from app.models.patient_link import PatientNutritionistLink
 def init_db():
     print("Running database initialization and migration...")
     import time
+    eng = get_engine()
     for attempt in range(1, 11):
         try:
-            with engine.connect() as conn:
+            with eng.connect() as conn:
                 conn.execute(text("SELECT 1"))
                 print("Database connection successfully established.")
                 break
@@ -24,14 +25,14 @@ def init_db():
             time.sleep(2)
 
     # 1. Create all non-existing tables
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=eng)
     print("Base metadata create_all completed.")
 
     # 2. Check and alter 'users' table columns if needed
-    insp = inspect(engine)
+    insp = inspect(eng)
     if 'users' in insp.get_table_names():
         existing_user_cols = [c['name'] for c in insp.get_columns('users')]
-        with engine.connect() as conn:
+        with eng.connect() as conn:
             if 'phone' not in existing_user_cols:
                 print("Adding column 'phone' to 'users' table...")
                 conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(50);"))
@@ -45,7 +46,7 @@ def init_db():
                 conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36);"))
                 conn.commit()
 
-    db = SessionLocal()
+    db = get_session_local()()
     try:
         # 3. Seed Roles
         roles_data = [

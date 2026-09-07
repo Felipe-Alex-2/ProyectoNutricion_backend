@@ -8,7 +8,7 @@ from app.middleware.error_handler import (
     validation_exception_handler,
     general_exception_handler,
 )
-from app.database import engine, Base
+from app.database import get_engine, Base
 import app.models  # Ensure all models are registered with Base
 
 
@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning(f"Note: Database auto-init skipped or deferred: {exc}")
         try:
-            Base.metadata.create_all(bind=engine)
+            Base.metadata.create_all(bind=get_engine())
         except Exception:
             pass
     yield
@@ -78,7 +78,7 @@ def health_check():
     db_status = "ok"
     try:
         from sqlalchemy import text
-        with engine.connect() as conn:
+        with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as e:
         db_status = f"error: {str(e)}"
