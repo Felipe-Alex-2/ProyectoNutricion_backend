@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class GenerateLinkRequest(BaseModel):
@@ -10,7 +10,16 @@ class GenerateLinkRequest(BaseModel):
 
 
 class ClaimLinkRequest(BaseModel):
-    pairing_code: str
+    pairing_code: str = Field(..., min_length=4, max_length=20, description="Código de vinculación de 6 caracteres")
+
+    @field_validator("pairing_code")
+    @classmethod
+    def validate_pairing_code(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) < 4:
+            raise ValueError("El código de vinculación no es válido")
+        return v
+
 
 
 class PatientLinkResponse(BaseModel):

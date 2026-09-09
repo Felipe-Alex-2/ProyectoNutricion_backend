@@ -1,18 +1,26 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.schemas.user import UserResponse
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=8, description="Password must be at least 8 characters long")
-    full_name: str = Field(..., min_length=2, max_length=100)
-    client_platform: Optional[str] = Field("web", description="Origin platform: 'web' or 'mobile'")
+    email: EmailStr = Field(..., description="Correo electrónico válido para registro")
+    password: str = Field(..., min_length=8, max_length=128, description="Contraseña de acceso (mínimo 8 caracteres)")
+    full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo")
+    client_platform: Optional[str] = Field("web", description="Plataforma de origen: 'web' o 'mobile'")
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("El nombre debe tener al menos 2 caracteres")
+        return v
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    email: EmailStr = Field(..., description="Correo electrónico registrado")
+    password: str = Field(..., min_length=1, description="Contraseña de acceso")
 
 
 class TokenResponse(BaseModel):
@@ -24,7 +32,7 @@ class TokenResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str = Field(..., min_length=10, description="Token JWT de refresco")
 
 
 class TokenPayload(BaseModel):
@@ -36,10 +44,11 @@ class TokenPayload(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(..., description="Correo electrónico registrado")
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str = Field(..., description="10-minute reset token received by email")
-    new_password: str = Field(..., min_length=8, description="New password with minimum 8 characters")
+    token: str = Field(..., min_length=10, description="Token de restablecimiento de contraseña")
+    new_password: str = Field(..., min_length=8, max_length=128, description="Nueva contraseña con mínimo 8 caracteres")
+
 
