@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, HttpUrl
 
 
@@ -27,6 +27,7 @@ class RecipeBase(BaseModel):
 
 class RecipeCreate(RecipeBase):
     tenant_id: Optional[str] = None
+    assigned_patient_ids: Optional[List[str]] = Field(default=[], description="Lista de IDs de pacientes asignados a esta receta")
 
 
 class RecipeUpdate(BaseModel):
@@ -50,6 +51,7 @@ class RecipeUpdate(BaseModel):
     ingredients: Optional[str] = None
     instructions: Optional[str] = None
     is_active: Optional[bool] = None
+    assigned_patient_ids: Optional[List[str]] = None
 
 
 class RecipeResponse(RecipeBase):
@@ -57,8 +59,10 @@ class RecipeResponse(RecipeBase):
     tenant_id: Optional[str] = None
     created_by: str
     is_active: bool
+    assigned_patient_ids: List[str] = []
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+

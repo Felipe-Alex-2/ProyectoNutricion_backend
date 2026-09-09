@@ -47,3 +47,17 @@ class Recipe(Base):
     # Relaciones
     tenant = relationship("Tenant")
     creator = relationship("User", foreign_keys=[created_by])
+    assignments = relationship("RecipeAssignment", back_populates="recipe", cascade="all, delete-orphan")
+
+
+class RecipeAssignment(Base):
+    __tablename__ = "recipe_assignments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    recipe_id = Column(String(36), ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True)
+    patient_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    assigned_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    recipe = relationship("Recipe", back_populates="assignments")
+    patient = relationship("User")
+

@@ -171,3 +171,59 @@ def test_anamnesis_and_clinical_record(client, test_setup):
     )
     assert res_list_records.status_code == 200
     assert len(res_list_records.json()) == 1
+
+
+def test_recipe_assignments_and_my_plan(client, test_setup):
+    nutri_token = test_setup["nutri_token"]
+    patient_token = test_setup["patient_token"]
+    patient = test_setup["patient"]
+    headers_nutri = {"Authorization": f"Bearer {nutri_token}"}
+    headers_patient = {"Authorization": f"Bearer {patient_token}"}
+
+    # 1. Nutricionista crea receta asignada al paciente
+    payload = {
+        "title": "Bowl Proteico de Quinoa",
+        "description": "Receta asignada especialmente para Carlos",
+        "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c",
+        "calories": 480.0,
+        "protein": 32.0,
+        "carbohydrates": 45.0,
+        "fats": 14.0,
+        "fiber": 8.0,
+        "servings": 1,
+        "prep_time_minutes": 15,
+        "cook_time_minutes": 15,
+        "difficulty": "Fácil",
+        "category": "Almuerzo",
+        "ingredients": "100g quinoa cocida, 150g pechuga pollo, vegetales salteados",
+        "instructions": "1. Mezclar quinoa con pechuga asada. 2. Añadir vegetales.",
+        "assigned_patient_ids": [patient.id],
+    }
+
+    res = client.post("/api/v1/recipes", json=payload, headers=headers_nutri)
+    assert res.status_code == 201
+    recipe_data = res.json()
+    assert recipe_data["assigned_patient_ids"] == [patient.id]
+
+    # 2. Paciente consulta su plan desde la App Móvil
+    res_plan = client.get("/api/v1/recipes/my-plan", headers=headers_patient)
+    assert res_plan.status_code == 200
+    my_plan = res_plan.json()
+    assert len(my_plan) >= 1
+    assert my_plan[0]["title"] == "Bowl Proteico de Quinoa"
+    assert my_plan[0]["calories"] == 480.0
+
+    # 3. Nutricionista actualiza la asignación
+    recipe_id = recipe_data["id"]
+    res_update = client.put(
+        f"/api/v1/recipes/{recipe_id}",
+        json={"assigned_patient_ids": []},
+        headers=headers_nutri,
+    )
+    assert res_update.status_code == 200
+    assert res_update.json()["assigned_patient_ids"] == []
+
+    # 4. Ahora el paciente no tiene recetas asignadas
+    res_plan2 = client.get("/api/v1/recipes/my-plan", headers=headers_patient)
+    assert res_plan2.status_code == 200
+    assert len(res_plan2.json()) == 0
