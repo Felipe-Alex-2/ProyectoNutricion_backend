@@ -1,9 +1,25 @@
+import re
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator
 
 
+def validate_password_strength(password: str) -> str:
+    if len(password) < 8:
+        raise ValueError("La contraseña debe contener al menos 8 caracteres")
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("La contraseña debe incluir al menos una letra mayúscula")
+    if not re.search(r"[a-z]", password):
+        raise ValueError("La contraseña debe incluir al menos una letra minúscula")
+    if not re.search(r"[0-9]", password):
+        raise ValueError("La contraseña debe incluir al menos un número")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise ValueError("La contraseña debe incluir al menos un carácter especial")
+    return password
+
+
 class UserBase(BaseModel):
+
     email: EmailStr = Field(..., description="Correo electrónico válido")
     full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo (mínimo 2 caracteres)")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
@@ -33,11 +49,21 @@ class UserCreate(UserBase):
     role_id: Optional[str] = Field("CLIENTE", description="Rol asignado al usuario")
     tenant_id: Optional[str] = Field(None, description="ID de la organización asociada")
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
 
 class OrganizationUserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=128, description="Contraseña de acceso (mínimo 8 caracteres)")
     role_id: str = Field(..., min_length=2, max_length=50, description="Rol del usuario (ej: NUTRICIONISTA, CLIENTE, ADMIN_ORGANIZATION)")
     tenant_id: str = Field(..., min_length=1, description="ID de la organización o clínica asociada")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class UserUpdate(BaseModel):
@@ -48,6 +74,14 @@ class UserUpdate(BaseModel):
     role_id: Optional[str] = Field(None, description="Rol del usuario")
     tenant_id: Optional[str] = Field(None, description="ID de la organización")
     is_active: Optional[bool] = Field(None, description="Estado de actividad")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return validate_password_strength(v)
+        return v
+
 
     @field_validator("full_name")
     @classmethod

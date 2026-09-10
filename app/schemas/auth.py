@@ -1,6 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, validate_password_strength
 
 
 class RegisterRequest(BaseModel):
@@ -9,6 +9,11 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo")
     client_platform: Optional[str] = Field("web", description="Plataforma de origen: 'web' o 'mobile'")
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
     @field_validator("full_name")
     @classmethod
     def validate_full_name(cls, v: str) -> str:
@@ -16,6 +21,7 @@ class RegisterRequest(BaseModel):
         if len(v) < 2:
             raise ValueError("El nombre debe tener al menos 2 caracteres")
         return v
+
 
 
 class LoginRequest(BaseModel):
@@ -50,5 +56,10 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str = Field(..., min_length=10, description="Token de restablecimiento de contraseña")
     new_password: str = Field(..., min_length=8, max_length=128, description="Nueva contraseña con mínimo 8 caracteres")
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
