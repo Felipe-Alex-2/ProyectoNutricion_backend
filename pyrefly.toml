@@ -1,0 +1,6 @@
+search-path = [
+    ".",
+    "app",
+    "venv/Lib/site-packages"
+]
+errors = { missing-import = false }

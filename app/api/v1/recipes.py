@@ -1,5 +1,7 @@
+"""Endpoints de recetas nutricionales y planes de alimentación."""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -86,10 +88,26 @@ def create_recipe(
 
     tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else (data.tenant_id or current_user.tenant_id)
 
+    # Validar que no se repita el nombre de la receta (máximo 250 caracteres ya validado en schema)
+    clean_title = data.title.strip()
+    dup_query = db.query(Recipe).filter(
+        func.lower(Recipe.title) == clean_title.lower(),
+        Recipe.is_active == True,
+    )
+    if tenant_id:
+        dup_query = dup_query.filter(Recipe.tenant_id == tenant_id)
+    else:
+        dup_query = dup_query.filter(Recipe.created_by == current_user.id)
+    if dup_query.first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ya existe una receta activa con el nombre '{clean_title}'. No se puede repetir el mismo nombre.",
+        )
+
     recipe = Recipe(
         tenant_id=tenant_id,
         created_by=current_user.id,
-        title=data.title,
+        title=clean_title,
         description=data.description,
         image_url=data.image_url,
         calories=data.calories,
@@ -160,8 +178,28 @@ def update_recipe(
     if current_user.role_id == "NUTRICIONISTA" and recipe.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo puedes modificar tus recetas.")
 
+    # Validar que no se repita el nombre de la receta con otra receta existente
+    if data.title:
+        clean_title = data.title.strip()
+        dup_query = db.query(Recipe).filter(
+            func.lower(Recipe.title) == clean_title.lower(),
+            Recipe.is_active == True,
+            Recipe.id != recipe.id,
+        )
+        if recipe.tenant_id:
+            dup_query = dup_query.filter(Recipe.tenant_id == recipe.tenant_id)
+        else:
+            dup_query = dup_query.filter(Recipe.created_by == recipe.created_by)
+        if dup_query.first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya existe otra receta activa con el nombre '{clean_title}'. No se puede repetir el mismo nombre.",
+            )
+
     update_data = data.model_dump(exclude_unset=True, exclude={"assigned_patient_ids"})
     for key, value in update_data.items():
+        if key == "title" and isinstance(value, str):
+            value = value.strip()
         setattr(recipe, key, value)
 
     # Actualizar asignaciones si vienen en el payload

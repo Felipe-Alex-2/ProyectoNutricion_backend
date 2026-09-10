@@ -21,7 +21,7 @@ def validate_password_strength(password: str) -> str:
 class UserBase(BaseModel):
 
     email: EmailStr = Field(..., description="Correo electrónico válido")
-    full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo (mínimo 2 caracteres)")
+    full_name: str = Field(..., min_length=2, max_length=250, description="Nombre completo (mínimo 2, máximo 250 caracteres)")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
 
     @field_validator("full_name")
@@ -67,7 +67,7 @@ class OrganizationUserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = Field(None, min_length=2, max_length=100, description="Nombre completo")
+    full_name: Optional[str] = Field(None, min_length=2, max_length=250, description="Nombre completo (máximo 250 caracteres)")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
     password: Optional[str] = Field(None, min_length=8, max_length=128, description="Nueva contraseña")

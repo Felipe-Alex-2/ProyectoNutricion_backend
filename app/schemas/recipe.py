@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class RecipeBase(BaseModel):
-    title: str = Field(..., min_length=2, max_length=200, description="Nombre de la receta")
+    title: str = Field(..., min_length=2, max_length=250, description="Nombre de la receta (máximo 250 caracteres)")
     description: Optional[str] = Field(None, description="Breve descripción o resumen")
     image_url: Optional[str] = Field(None, max_length=500, description="URL de la fotografía del platillo")
 
@@ -31,7 +31,7 @@ class RecipeCreate(RecipeBase):
 
 
 class RecipeUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    title: Optional[str] = Field(None, min_length=2, max_length=250)
     description: Optional[str] = None
     image_url: Optional[str] = None
 

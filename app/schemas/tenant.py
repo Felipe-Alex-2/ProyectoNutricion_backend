@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
 
 
 class TenantBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100, description="Nombre de la clínica u organización")
+    name: str = Field(..., min_length=2, max_length=250, description="Nombre de la clínica u organización (máximo 250 caracteres)")
     code: str = Field(..., min_length=2, max_length=50, description="Código único identificador")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico de contacto")
@@ -27,7 +27,7 @@ class TenantCreate(TenantBase):
 
 
 class TenantUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=2, max_length=100, description="Nombre de la clínica")
+    name: Optional[str] = Field(None, min_length=2, max_length=250, description="Nombre de la clínica")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico")
     address: Optional[str] = Field(None, max_length=255, description="Dirección física")

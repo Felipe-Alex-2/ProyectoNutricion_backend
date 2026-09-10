@@ -1,4 +1,5 @@
 from typing import List, Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -29,6 +30,12 @@ class TenantService:
 
     @staticmethod
     def create(db: Session, data: TenantCreate) -> Tenant:
+        # Check name uniqueness (máx 250 car ya validado en schema)
+        clean_name = data.name.strip()
+        existing_name = db.query(Tenant).filter(func.lower(Tenant.name) == clean_name.lower()).first()
+        if existing_name:
+            raise ConflictException(f"Ya existe una organización con el nombre '{clean_name}'. No se puede repetir el mismo nombre.")
+
         # Check code uniqueness
         clean_code = data.code.strip().upper()
         existing = db.query(Tenant).filter(Tenant.code == clean_code).first()
@@ -36,7 +43,7 @@ class TenantService:
             raise ConflictException(f"Ya existe un tenant con el código '{clean_code}'")
 
         tenant = Tenant(
-            name=data.name.strip(),
+            name=clean_name,
             code=clean_code,
             phone=data.phone.strip() if data.phone else None,
             email=data.email.strip() if data.email else None,
@@ -55,6 +62,17 @@ class TenantService:
     def update(db: Session, tenant_id: str, data: TenantUpdate) -> Tenant:
         tenant = TenantService.get_by_id(db, tenant_id)
         update_data = data.model_dump(exclude_unset=True)
+
+        if "name" in update_data and update_data["name"]:
+            clean_name = update_data["name"].strip()
+            existing_name = db.query(Tenant).filter(
+                func.lower(Tenant.name) == clean_name.lower(),
+                Tenant.id != tenant_id,
+            ).first()
+            if existing_name:
+                raise ConflictException(f"Ya existe otra organización con el nombre '{clean_name}'. No se puede repetir el mismo nombre.")
+            update_data["name"] = clean_name
+
         for key, value in update_data.items():
             setattr(tenant, key, value)
         db.commit()

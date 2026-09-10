@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -76,6 +77,16 @@ def create_organization_user(
     if existing:
         raise ConflictException(f"El correo '{clean_email}' ya está registrado")
 
+    # Check name unique within tenant (máx 250 car ya validado en schema)
+    clean_name = data.full_name.strip()
+    existing_name = db.query(User).filter(
+        func.lower(User.full_name) == clean_name.lower(),
+        User.tenant_id == target_tenant_id,
+        User.is_active == True,
+    ).first()
+    if existing_name:
+        raise ConflictException(f"Ya existe un usuario con el nombre '{clean_name}' en esta organización. No se puede repetir el mismo nombre.")
+
     # Check tenant exists
     tenant = db.query(Tenant).filter(Tenant.id == target_tenant_id).first()
     if not tenant:
@@ -83,7 +94,7 @@ def create_organization_user(
 
     user = User(
         email=clean_email,
-        full_name=data.full_name.strip(),
+        full_name=clean_name,
         hashed_password=get_password_hash(data.password),
         phone=data.phone.strip() if data.phone else None,
         role_id=data.role_id,
@@ -119,7 +130,16 @@ def update_organization_user(
         data.tenant_id = current_user.tenant_id
 
     if data.full_name is not None:
-        user.full_name = data.full_name.strip()
+        clean_name = data.full_name.strip()
+        existing_name = db.query(User).filter(
+            func.lower(User.full_name) == clean_name.lower(),
+            User.tenant_id == user.tenant_id,
+            User.is_active == True,
+            User.id != user.id,
+        ).first()
+        if existing_name:
+            raise ConflictException(f"Ya existe otro usuario activo con el nombre '{clean_name}' en esta organización. No se puede repetir el mismo nombre.")
+        user.full_name = clean_name
     if data.phone is not None:
         user.phone = data.phone.strip() if data.phone else None
     if data.role_id is not None:
