@@ -61,6 +61,12 @@ class PayPalService:
         """
         access_token = PayPalService._get_access_token()
 
+        # Sanitize description to clean ASCII
+        clean_desc = (description or "Servicio NutriSalud").encode("ascii", "ignore").decode("ascii").strip()
+        if not clean_desc:
+            clean_desc = "Servicio NutriSalud"
+
+        # Modern PayPal v2 Orders payload using payment_source
         order_payload = {
             "intent": "CAPTURE",
             "purchase_units": [
@@ -69,15 +75,20 @@ class PayPalService:
                         "currency_code": currency,
                         "value": f"{amount:.2f}",
                     },
-                    "description": description,
+                    "description": clean_desc[:127],
                 }
             ],
-            "application_context": {
-                "brand_name": "NutriSalud",
-                "landing_page": "LOGIN",
-                "user_action": "PAY_NOW",
-                "return_url": return_url,
-                "cancel_url": cancel_url,
+            "payment_source": {
+                "paypal": {
+                    "experience_context": {
+                        "brand_name": "NutriSalud POS",
+                        "landing_page": "LOGIN",
+                        "user_action": "PAY_NOW",
+                        "shipping_preference": "NO_SHIPPING",
+                        "return_url": return_url,
+                        "cancel_url": cancel_url,
+                    }
+                }
             },
         }
 
@@ -98,17 +109,23 @@ class PayPalService:
         data = response.json()
         order_id = data["id"]
 
-        # Find the approval link
+        # Find approval or payer-action link
         approval_url: Optional[str] = None
         for link in data.get("links", []):
-            if link["rel"] == "approve":
-                approval_url = link["href"]
+            if link.get("rel") in ("payer-action", "approve"):
+                approval_url = link.get("href")
                 break
 
         if not approval_url:
-            raise Exception("PayPal did not return an approval URL")
+            # Fallback URL if links not found
+            approval_url = f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}"
 
-        logger.info(f"PayPal order created: {order_id}")
+        # Ensure fundingSource=paypal is present so it directs directly to PayPal login
+        if "fundingSource=" not in approval_url:
+            separator = "&" if "?" in approval_url else "?"
+            approval_url = f"{approval_url}{separator}fundingSource=paypal"
+
+        logger.info(f"PayPal order created: {order_id} -> {approval_url}")
         return {"order_id": order_id, "approval_url": approval_url}
 
     # ------------------------------------------------------------------ #
