@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -26,6 +26,28 @@ class AppointmentService:
         scheduled_at = data.scheduled_at
         if scheduled_at.tzinfo is None:
             scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+
+        # Validar solapamiento: cada cita dura 30 minutos.
+        # Si el MISMO nutricionista ya tiene una cita CONFIRMADA dentro del rango de 30 minutos:
+        overlap_start = scheduled_at - timedelta(minutes=29, seconds=59)
+        overlap_end = scheduled_at + timedelta(minutes=29, seconds=59)
+
+        conflicting = (
+            db.query(Appointment)
+            .filter(
+                Appointment.nutritionist_id == data.nutritionist_id,
+                Appointment.status == "CONFIRMED",
+                Appointment.scheduled_at >= overlap_start,
+                Appointment.scheduled_at <= overlap_end,
+            )
+            .first()
+        )
+        if conflicting:
+            conf_time = conflicting.scheduled_at.strftime("%H:%M")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El nutricionista ya tiene una cita confirmada a las {conf_time}. Cada consulta tiene una duración de 30 minutos. Por favor selecciona otro horario.",
+            )
 
         appointment = Appointment(
             tenant_id=tenant_id,
@@ -82,6 +104,7 @@ class AppointmentService:
         current_user: User,
         status_filter: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        nutritionist_id: Optional[str] = None,
     ) -> List[AppointmentOut]:
         query = db.query(Appointment)
 
@@ -95,6 +118,9 @@ class AppointmentService:
         elif current_user.role_id == "ADMIN_SAAS":
             if tenant_id:
                 query = query.filter(Appointment.tenant_id == tenant_id)
+
+        if nutritionist_id and nutritionist_id.upper() != "ALL":
+            query = query.filter(Appointment.nutritionist_id == nutritionist_id)
 
         if status_filter and status_filter.upper() != "ALL":
             query = query.filter(Appointment.status == status_filter.upper())
@@ -116,6 +142,29 @@ class AppointmentService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para confirmar esta cita",
+            )
+
+        # Validar solapamiento con citas CONFIRMED del mismo especialista (duración de 30 min)
+        overlap_start = appointment.scheduled_at - timedelta(minutes=29, seconds=59)
+        overlap_end = appointment.scheduled_at + timedelta(minutes=29, seconds=59)
+
+        conflicting = (
+            db.query(Appointment)
+            .filter(
+                Appointment.id != appointment.id,
+                Appointment.nutritionist_id == appointment.nutritionist_id,
+                Appointment.status == "CONFIRMED",
+                Appointment.scheduled_at >= overlap_start,
+                Appointment.scheduled_at <= overlap_end,
+            )
+            .first()
+        )
+        if conflicting:
+            conf_time = conflicting.scheduled_at.strftime("%H:%M")
+            nutri_name = appointment.nutritionist.full_name if appointment.nutritionist else "El especialista"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{nutri_name} ya se encuentra ocupado con una cita confirmada a las {conf_time} (rango de 30 minutos). No es posible confirmar dos citas simultáneas para el mismo doctor.",
             )
 
         appointment.status = "CONFIRMED"

@@ -31,6 +31,7 @@ def schedule_appointment(
 def get_appointments(
     status: Optional[str] = Query(None, description="Filtro de estado: PENDING, CONFIRMED, CANCELLED o ALL"),
     tenant_id: Optional[str] = Query(None, description="ID del tenant (solo para administradores)"),
+    nutritionist_id: Optional[str] = Query(None, description="Filtrar por nutricionista específico"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -38,7 +39,11 @@ def get_appointments(
     Lista las citas asociadas al usuario actual o a la organización/clínica según rol.
     """
     return AppointmentService.list_appointments(
-        db=db, current_user=current_user, status_filter=status, tenant_id=tenant_id
+        db=db,
+        current_user=current_user,
+        status_filter=status,
+        tenant_id=tenant_id,
+        nutritionist_id=nutritionist_id,
     )
 
 
