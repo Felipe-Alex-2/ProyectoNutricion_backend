@@ -83,7 +83,7 @@ class TenantService:
     @staticmethod
     def toggle_status(db: Session, tenant_id: str) -> Tenant:
         tenant = TenantService.get_by_id(db, tenant_id)
-        tenant.is_active = not tenant.is_active
+        tenant.is_active = not tenant.is_active  # type: ignore[assignment]
         db.commit()
         db.refresh(tenant)
         tenant.users_count = db.query(User).filter(User.tenant_id == tenant.id).count()
