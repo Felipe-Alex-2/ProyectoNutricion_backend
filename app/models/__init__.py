@@ -7,6 +7,7 @@ from app.models.patient_link import PatientNutritionistLink
 from app.models.activity_log import ActivityLog
 from app.models.recipe import Recipe, RecipeAssignment
 from app.models.clinical import PatientAnamnesis, ClinicalRecord
+from app.models.subscription import Subscription
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "RecipeAssignment",
     "PatientAnamnesis",
     "ClinicalRecord",
+    "Subscription",
 ]

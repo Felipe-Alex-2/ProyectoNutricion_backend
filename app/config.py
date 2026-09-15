@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: str = "soporte@nutrisalud.com"
     EMAILS_FROM_NAME: str = "NutriSalud"
 
+    # PayPal Sandbox
+    PAYPAL_CLIENT_ID: str = ""
+    PAYPAL_CLIENT_SECRET: str = ""
+    PAYPAL_BASE_URL: str = "https://api-m.sandbox.paypal.com"
+
     # CORS — stored as plain str so pydantic-settings never calls json.loads() on it.
     # Railway: set CORS_ORIGINS=https://your-app.com,https://other.com  (comma-separated)
     # OR leave unset to use the default localhost origins.
