@@ -9,6 +9,8 @@ from app.models.recipe import Recipe, RecipeAssignment
 from app.models.clinical import PatientAnamnesis, ClinicalRecord
 from app.models.subscription import Subscription
 from app.models.payment import Payment
+from app.models.appointment import Appointment
+from app.models.notification import Notification
 
 __all__ = [
     "Base",
@@ -26,4 +28,6 @@ __all__ = [
     "ClinicalRecord",
     "Subscription",
     "Payment",
+    "Appointment",
+    "Notification",
 ]

@@ -5,6 +5,8 @@ from app.models.tenant import Tenant
 from app.models.rbac import Role, Permission, RolePermission
 from app.models.user import User
 from app.models.patient_link import PatientNutritionistLink
+from app.models.appointment import Appointment
+from app.models.notification import Notification
 
 
 def init_db():
