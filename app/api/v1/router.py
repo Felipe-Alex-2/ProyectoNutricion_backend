@@ -9,6 +9,7 @@ from app.api.v1.activity_logs import router as activity_logs_router
 from app.api.v1.recipes import router as recipes_router
 from app.api.v1.clinical import router as clinical_router
 from app.api.v1.subscriptions import router as subscriptions_router
+from app.api.v1.payments import router as payments_router
 
 api_v1_router = APIRouter(prefix="/v1")
 
@@ -22,4 +23,5 @@ api_v1_router.include_router(activity_logs_router)
 api_v1_router.include_router(recipes_router)
 api_v1_router.include_router(clinical_router)
 api_v1_router.include_router(subscriptions_router)
+api_v1_router.include_router(payments_router)
 
