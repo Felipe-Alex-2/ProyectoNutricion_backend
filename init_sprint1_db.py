@@ -46,6 +46,14 @@ def init_db():
                 conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36);"))
                 conn.commit()
 
+    if 'payments' in insp.get_table_names():
+        existing_payment_cols = [c['name'] for c in insp.get_columns('payments')]
+        with eng.connect() as conn:
+            if 'payment_method' not in existing_payment_cols:
+                print("Adding column 'payment_method' to 'payments' table...")
+                conn.execute(text("ALTER TABLE payments ADD COLUMN payment_method VARCHAR(50) DEFAULT 'PAYPAL';"))
+                conn.commit()
+
     db = get_session_local()()
     try:
         # 3. Seed Roles

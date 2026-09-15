@@ -21,6 +21,9 @@ class Payment(Base):
     # Status: PENDING, COMPLETED, CANCELLED, FAILED
     status = Column(String(50), default="PENDING", nullable=False, index=True)
 
+    # Payment Method: PAYPAL, EFECTIVO
+    payment_method = Column(String(50), default="PAYPAL", nullable=False, server_default="PAYPAL", index=True)
+
     paypal_order_id = Column(String(100), nullable=True, index=True)
     paypal_capture_id = Column(String(100), nullable=True)
     notes = Column(Text, nullable=True)

@@ -40,6 +40,7 @@ class PaymentService:
             amount=p.amount,
             currency=p.currency,
             status=p.status,
+            payment_method=p.payment_method or "PAYPAL",
             paypal_order_id=p.paypal_order_id,
             paypal_capture_id=p.paypal_capture_id,
             notes=p.notes,
@@ -54,7 +55,7 @@ class PaymentService:
         data: PaymentCreate,
         frontend_url: str = "http://localhost:4200",
     ) -> PaymentOrderCreatedOut:
-        """Create a pending payment record and generate the PayPal checkout order."""
+        """Create a payment record (either immediate EFECTIVO or PENDING PayPal order)."""
         # 1. Verify tenant exists
         tenant = db.query(Tenant).filter(Tenant.id == data.tenant_id).first()
         if not tenant:
@@ -63,7 +64,45 @@ class PaymentService:
                 detail=f"Sucursal con ID {data.tenant_id} no encontrada",
             )
 
-        # 2. Call PayPal Sandbox API to create order
+        method = (data.payment_method or "PAYPAL").upper()
+
+        # 2. If Cash (EFECTIVO), record directly as COMPLETED without calling PayPal
+        if method == "EFECTIVO":
+            now = datetime.now(timezone.utc)
+            payment = Payment(
+                tenant_id=data.tenant_id,
+                cashier_id=cashier.id,
+                customer_name=data.customer_name,
+                customer_email=data.customer_email,
+                concept=data.concept,
+                amount=round(data.amount, 2),
+                currency=data.currency,
+                status="COMPLETED",
+                payment_method="EFECTIVO",
+                paypal_order_id=None,
+                notes=data.notes,
+                paid_at=now,
+            )
+            db.add(payment)
+            db.commit()
+            db.refresh(payment)
+
+            logger.info(
+                f"Cobro en efectivo registrado: ID {payment.id}, Monto ${payment.amount}"
+            )
+
+            return PaymentOrderCreatedOut(
+                payment_id=payment.id,
+                paypal_order_id=None,
+                approval_url=None,
+                payment_method="EFECTIVO",
+                amount=payment.amount,
+                currency=payment.currency,
+                concept=payment.concept,
+                customer_name=payment.customer_name,
+            )
+
+        # 3. Call PayPal Sandbox API to create order
         description = f"Cobro Sucursal {tenant.name} - {data.concept} ({data.customer_name})"
         return_url = f"{frontend_url}/paypal-return"
         cancel_url = f"{frontend_url}/dashboard"
@@ -83,7 +122,7 @@ class PaymentService:
                 detail=f"Error comunicando con PayPal Sandbox: {str(exc)}",
             )
 
-        # 3. Store Payment in DB
+        # Store Payment in DB as PENDING PayPal order
         payment = Payment(
             tenant_id=data.tenant_id,
             cashier_id=cashier.id,
@@ -93,6 +132,7 @@ class PaymentService:
             amount=round(data.amount, 2),
             currency=data.currency,
             status="PENDING",
+            payment_method="PAYPAL",
             paypal_order_id=order_data["order_id"],
             notes=data.notes,
         )
@@ -101,13 +141,14 @@ class PaymentService:
         db.refresh(payment)
 
         logger.info(
-            f"Cobro creado: ID {payment.id}, PayPal Order {payment.paypal_order_id}, Monto ${payment.amount}"
+            f"Cobro PayPal creado: ID {payment.id}, PayPal Order {payment.paypal_order_id}, Monto ${payment.amount}"
         )
 
         return PaymentOrderCreatedOut(
             payment_id=payment.id,
             paypal_order_id=order_data["order_id"],
             approval_url=order_data["approval_url"],
+            payment_method="PAYPAL",
             amount=payment.amount,
             currency=payment.currency,
             concept=payment.concept,
@@ -135,18 +176,17 @@ class PaymentService:
         try:
             capture_res = PayPalService.capture_order(paypal_order_id)
         except Exception as exc:
-            logger.error(f"Error capturando orden {paypal_order_id}: {exc}")
+            logger.error(f"Error capturando cobro PayPal {paypal_order_id}: {exc}")
             payment.status = "FAILED"
             db.commit()
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Fallo en la captura de fondos con PayPal: {str(exc)}",
+                detail=f"Error capturando orden en PayPal: {str(exc)}",
             )
 
         payment.status = "COMPLETED"
-        payment.paid_at = datetime.now(timezone.utc)
         payment.paypal_capture_id = capture_res.get("capture_id")
-
+        payment.paid_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(payment)
 
@@ -159,12 +199,18 @@ class PaymentService:
         tenant_id: Optional[str] = None,
         status_filter: Optional[str] = None,
     ) -> List[PaymentOut]:
-        """List payments filtered by tenant branch and optional status."""
+        """List payments filtered by tenant branch and optional status or payment method."""
         query = db.query(Payment)
         if tenant_id:
             query = query.filter(Payment.tenant_id == tenant_id)
         if status_filter:
-            query = query.filter(Payment.status == status_filter)
+            sf = status_filter.upper()
+            if sf == "EFECTIVO":
+                query = query.filter(Payment.payment_method == "EFECTIVO")
+            elif sf == "PAYPAL":
+                query = query.filter(Payment.payment_method == "PAYPAL")
+            else:
+                query = query.filter(Payment.status == status_filter)
 
         payments = query.order_by(Payment.created_at.desc()).all()
         return [PaymentService._map_to_out(p) for p in payments]
