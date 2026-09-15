@@ -238,8 +238,11 @@ def delete_recipe(
     if not recipe:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receta no encontrada.")
 
-    if current_user.role_id == "NUTRICIONISTA" and recipe.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes eliminar recetas de otros especialistas.")
+    if current_user.role_id == "NUTRICIONISTA":
+        if recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes eliminar recetas de otra clínica.")
+        elif not recipe.tenant_id and recipe.created_by and recipe.created_by != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes eliminar recetas creadas por otros especialistas.")
 
     recipe.is_active = False
     log = ActivityLog(
