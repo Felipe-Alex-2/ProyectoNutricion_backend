@@ -9,8 +9,9 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    plan_name = Column(String(50), nullable=False)  # BASICO, PROFESIONAL, PREMIUM
+    tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    plan_name = Column(String(50), nullable=False)  # BASICO, PROFESIONAL, PREMIUM, CLIENTE_FREE, CLIENTE_PREMIUM
     paypal_order_id = Column(String(100), nullable=True, index=True)
     paypal_capture_id = Column(String(100), nullable=True)
     status = Column(String(20), default="PENDING", nullable=False)  # PENDING, ACTIVE, CANCELLED, EXPIRED
@@ -22,3 +23,4 @@ class Subscription(Base):
 
     # Relationships
     tenant = relationship("Tenant", backref="subscriptions")
+    user = relationship("User", backref="subscriptions")

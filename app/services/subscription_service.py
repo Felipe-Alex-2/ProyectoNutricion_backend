@@ -23,6 +23,38 @@ logger = logging.getLogger("subscriptions")
 # ------------------------------------------------------------------ #
 
 PLANS = {
+    "CLIENTE_FREE": {
+        "display_name": "Plan Gratuito",
+        "price": 0.0,
+        "currency": "USD",
+        "period": "siempre",
+        "max_patients": None,
+        "recommended": False,
+        "features": [
+            {"text": "Mi Ficha de Salud (Anamnesis)", "included": True},
+            {"text": "Generar Cita con Nutricionista", "included": True},
+            {"text": "Vincularse con Nutricionista", "included": True},
+            {"text": "Ver Plan Nutricional", "included": True},
+            {"text": "Recomendación de comidas con IA", "included": False},
+            {"text": "Estimación nutricional de Alimentos con IA", "included": False},
+        ],
+    },
+    "CLIENTE_PREMIUM": {
+        "display_name": "Plan Premium IA",
+        "price": 5.0,
+        "currency": "USD",
+        "period": "mes",
+        "max_patients": None,
+        "recommended": True,
+        "features": [
+            {"text": "Mi Ficha de Salud (Anamnesis)", "included": True},
+            {"text": "Generar Cita con Nutricionista", "included": True},
+            {"text": "Vincularse con Nutricionista", "included": True},
+            {"text": "Ver Plan Nutricional", "included": True},
+            {"text": "Recomendación de comidas con IA", "included": True},
+            {"text": "Estimación nutricional de Alimentos con IA", "included": True},
+        ],
+    },
     "BASICO": {
         "display_name": "Básico",
         "price": 9.99,
@@ -102,7 +134,12 @@ class SubscriptionService:
     #  Create order (pending subscription)
     # ------------------------------------------------------------------ #
     @staticmethod
-    def create_order(db: Session, tenant_id: str, plan_name: str) -> dict:
+    def create_order(
+        db: Session,
+        tenant_id: Optional[str],
+        plan_name: str,
+        user_id: Optional[str] = None,
+    ) -> dict:
         """Create a PayPal order and a PENDING subscription row."""
         plan_name_upper = plan_name.upper()
         if plan_name_upper not in PLANS:
@@ -119,7 +156,7 @@ class SubscriptionService:
         paypal_result = PayPalService.create_order(
             amount=plan["price"],
             currency=plan["currency"],
-            description=f"NutriSalud — Plan {plan['display_name']} (Mensual)",
+            description=f"NutriSalud — Plan {plan['display_name']} (1 Mes)",
             return_url=return_url,
             cancel_url=cancel_url,
         )
@@ -127,6 +164,7 @@ class SubscriptionService:
         # Persist pending subscription
         subscription = Subscription(
             tenant_id=tenant_id,
+            user_id=user_id,
             plan_name=plan_name_upper,
             paypal_order_id=paypal_result["order_id"],
             status="PENDING",
@@ -139,7 +177,7 @@ class SubscriptionService:
 
         logger.info(
             f"Subscription order created: {subscription.id} "
-            f"(tenant={tenant_id}, plan={plan_name_upper}, paypal_order={paypal_result['order_id']})"
+            f"(tenant={tenant_id}, user={user_id}, plan={plan_name_upper}, paypal_order={paypal_result['order_id']})"
         )
 
         return {
@@ -152,38 +190,45 @@ class SubscriptionService:
     #  Capture payment and activate subscription
     # ------------------------------------------------------------------ #
     @staticmethod
-    def capture_order(db: Session, order_id: str, tenant_id: str) -> Subscription:
+    def capture_order(
+        db: Session,
+        order_id: str,
+        tenant_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Subscription:
         """
         Capture a PayPal order after buyer approval.
         Activates the subscription and sets expiry to +30 days.
         """
-        # Find the pending subscription
-        subscription = (
-            db.query(Subscription)
-            .filter(
-                Subscription.paypal_order_id == order_id,
-                Subscription.tenant_id == tenant_id,
-                Subscription.status == "PENDING",
-            )
-            .first()
+        query = db.query(Subscription).filter(
+            Subscription.paypal_order_id == order_id,
+            Subscription.status == "PENDING",
         )
+        if tenant_id:
+            query = query.filter(Subscription.tenant_id == tenant_id)
+        elif user_id:
+            query = query.filter(Subscription.user_id == user_id)
+
+        subscription = query.first()
         if not subscription:
             raise ValueError("No se encontró una suscripción pendiente para esta orden.")
 
         # Capture with PayPal
         capture_result = PayPalService.capture_order(order_id)
-        if capture_result["status"] != "COMPLETED":
+        if capture_result.get("status") not in ("COMPLETED", "APPROVED"):
             subscription.status = "FAILED"  # type: ignore[assignment]
             db.commit()
             raise Exception(
-                f"El pago no fue completado. Estado PayPal: {capture_result['status']}"
+                f"El pago no fue completado. Estado PayPal: {capture_result.get('status')}"
             )
 
-        # Cancel any previously active subscription for this tenant
-        db.query(Subscription).filter(
-            Subscription.tenant_id == tenant_id,
-            Subscription.status == "ACTIVE",
-        ).update({"status": "REPLACED"})
+        # Cancel any previously active subscription for this tenant or user
+        cancel_query = db.query(Subscription).filter(Subscription.status == "ACTIVE")
+        if subscription.tenant_id:
+            cancel_query = cancel_query.filter(Subscription.tenant_id == subscription.tenant_id)
+        elif subscription.user_id:
+            cancel_query = cancel_query.filter(Subscription.user_id == subscription.user_id)
+        cancel_query.update({"status": "REPLACED"})
 
         # Activate
         now = datetime.now(timezone.utc)
@@ -196,40 +241,99 @@ class SubscriptionService:
 
         logger.info(
             f"Subscription activated: {subscription.id} "
-            f"(tenant={tenant_id}, plan={subscription.plan_name}, expires={subscription.expires_at})"
+            f"(tenant={subscription.tenant_id}, user={subscription.user_id}, plan={subscription.plan_name}, expires={subscription.expires_at})"
         )
+        return subscription
+
+    # ------------------------------------------------------------------ #
+    #  Direct / Sandbox activation for testing
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def direct_activate_client_premium(db: Session, user_id: str, order_id: Optional[str] = None) -> Subscription:
+        """Directly activates or validates a 30-day Premium subscription for a client."""
+        # Check if there is an existing pending subscription for this user
+        subscription = None
+        if order_id:
+            subscription = db.query(Subscription).filter(
+                Subscription.paypal_order_id == order_id,
+                Subscription.user_id == user_id,
+            ).first()
+
+        now = datetime.now(timezone.utc)
+        # Cancel any existing active
+        db.query(Subscription).filter(
+            Subscription.user_id == user_id,
+            Subscription.status == "ACTIVE",
+        ).update({"status": "REPLACED"})
+
+        if subscription:
+            subscription.status = "ACTIVE"
+            subscription.started_at = now
+            subscription.expires_at = now + timedelta(days=30)
+            subscription.amount = 5.0
+            subscription.currency = "USD"
+        else:
+            subscription = Subscription(
+                user_id=user_id,
+                plan_name="CLIENTE_PREMIUM",
+                paypal_order_id=order_id or "DIRECT_SANDBOX",
+                paypal_capture_id="SANDBOX_VERIFIED",
+                status="ACTIVE",
+                amount=5.0,
+                currency="USD",
+                started_at=now,
+                expires_at=now + timedelta(days=30),
+            )
+            db.add(subscription)
+
+        db.commit()
+        db.refresh(subscription)
         return subscription
 
     # ------------------------------------------------------------------ #
     #  Query helpers
     # ------------------------------------------------------------------ #
     @staticmethod
-    def get_active(db: Session, tenant_id: str) -> Optional[Subscription]:
-        """Return the currently active subscription for a tenant, or None."""
-        return (
-            db.query(Subscription)
-            .filter(
-                Subscription.tenant_id == tenant_id,
-                Subscription.status == "ACTIVE",
-            )
-            .order_by(Subscription.created_at.desc())
-            .first()
-        )
+    def get_active(
+        db: Session,
+        tenant_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Optional[Subscription]:
+        """Return the currently active subscription for a tenant or user, or None."""
+        query = db.query(Subscription).filter(Subscription.status == "ACTIVE")
+        if user_id:
+            query = query.filter(Subscription.user_id == user_id)
+        elif tenant_id:
+            query = query.filter(Subscription.tenant_id == tenant_id)
+        else:
+            return None
+
+        return query.order_by(Subscription.created_at.desc()).first()
 
     @staticmethod
-    def get_history(db: Session, tenant_id: str) -> List[Subscription]:
-        """Return all subscriptions (any status) for a tenant, newest first."""
-        return (
-            db.query(Subscription)
-            .filter(Subscription.tenant_id == tenant_id)
-            .order_by(Subscription.created_at.desc())
-            .all()
-        )
+    def get_history(
+        db: Session,
+        tenant_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> List[Subscription]:
+        """Return all subscriptions for a tenant or user, newest first."""
+        query = db.query(Subscription)
+        if user_id:
+            query = query.filter(Subscription.user_id == user_id)
+        elif tenant_id:
+            query = query.filter(Subscription.tenant_id == tenant_id)
+        else:
+            return []
+        return query.order_by(Subscription.created_at.desc()).all()
 
     @staticmethod
-    def cancel(db: Session, tenant_id: str) -> Subscription:
-        """Cancel the active subscription for a tenant."""
-        subscription = SubscriptionService.get_active(db, tenant_id)
+    def cancel(
+        db: Session,
+        tenant_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Subscription:
+        """Cancel the active subscription for a tenant or user."""
+        subscription = SubscriptionService.get_active(db, tenant_id=tenant_id, user_id=user_id)
         if not subscription:
             raise ValueError("No hay una suscripción activa para cancelar.")
 
@@ -237,5 +341,5 @@ class SubscriptionService:
         db.commit()
         db.refresh(subscription)
 
-        logger.info(f"Subscription cancelled: {subscription.id} (tenant={tenant_id})")
+        logger.info(f"Subscription cancelled: {subscription.id} (tenant={tenant_id}, user={user_id})")
         return subscription

@@ -5,7 +5,7 @@ Provides plan listing, order creation/capture (PayPal),
 active subscription queries, cancellation, and payment history.
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -35,17 +35,24 @@ def list_plans():
 
 
 # ------------------------------------------------------------------ #
-#  Current subscription for the logged-in user's tenant
+#  Current subscription for the logged-in user or user's tenant
 # ------------------------------------------------------------------ #
 @router.get("/current", response_model=SubscriptionOut | None)
 def get_current_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the active subscription for the user's tenant, or null."""
-    if not current_user.tenant_id:
-        return None
-    return SubscriptionService.get_active(db, current_user.tenant_id)
+    """Return the active subscription for the user or user's tenant, or null."""
+    # Check user-level subscription first (Mobile Patient)
+    active_sub = SubscriptionService.get_active(db, user_id=current_user.id)
+    if active_sub:
+        return active_sub
+
+    # If tenant exists, check tenant-level subscription (SaaS Admin)
+    if current_user.tenant_id:
+        return SubscriptionService.get_active(db, tenant_id=current_user.tenant_id)
+
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -58,21 +65,32 @@ def create_order(
     current_user: User = Depends(get_current_user),
 ):
     """Create a PayPal checkout order for the given plan."""
-    if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Tu cuenta no está asociada a una organización (tenant). Contacta al administrador.",
-        )
+    # Determine if it's a client or admin plan
+    plan_name = body.plan_name.upper()
+    is_client_plan = plan_name.startswith("CLIENTE")
 
-    # Only admins can create subscriptions
-    if current_user.role_id not in ("SAAS_ADMIN", "ORG_ADMIN"):
-        raise HTTPException(
-            status_code=403,
-            detail="Solo los administradores pueden gestionar suscripciones.",
-        )
+    tenant_id = current_user.tenant_id
+    user_id = current_user.id
+
+    if not is_client_plan:
+        if not tenant_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Tu cuenta no está asociada a una organización (tenant). Contacta al administrador.",
+            )
+        if current_user.role_id not in ("SAAS_ADMIN", "ORG_ADMIN"):
+            raise HTTPException(
+                status_code=403,
+                detail="Solo los administradores pueden gestionar suscripciones corporativas.",
+            )
 
     try:
-        result = SubscriptionService.create_order(db, current_user.tenant_id, body.plan_name)
+        result = SubscriptionService.create_order(
+            db,
+            tenant_id=tenant_id,
+            plan_name=body.plan_name,
+            user_id=user_id,
+        )
         return CreateOrderResponse(
             order_id=result["order_id"],
             approval_url=result["approval_url"],
@@ -93,16 +111,36 @@ def capture_order(
     current_user: User = Depends(get_current_user),
 ):
     """Capture a PayPal order after the buyer approved the checkout."""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail="Tu cuenta no está asociada a un tenant.")
-
     try:
-        subscription = SubscriptionService.capture_order(db, body.order_id, current_user.tenant_id)
+        subscription = SubscriptionService.capture_order(
+            db,
+            body.order_id,
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+        )
         return subscription
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error al capturar pago: {str(e)}")
+
+
+# ------------------------------------------------------------------ #
+#  Direct Sandbox validation / activation (for testing mobile flows)
+# ------------------------------------------------------------------ #
+@router.post("/validate-sandbox", response_model=SubscriptionOut)
+def validate_sandbox_subscription(
+    order_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Validate and activate Premium directly in Sandbox environment."""
+    sub = SubscriptionService.direct_activate_client_premium(
+        db,
+        user_id=current_user.id,
+        order_id=order_id,
+    )
+    return sub
 
 
 # ------------------------------------------------------------------ #
@@ -113,15 +151,13 @@ def cancel_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cancel the active subscription for the user's tenant."""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail="Tu cuenta no está asociada a un tenant.")
-
-    if current_user.role_id not in ("SAAS_ADMIN", "ORG_ADMIN"):
-        raise HTTPException(status_code=403, detail="Solo los administradores pueden cancelar suscripciones.")
-
+    """Cancel the active subscription."""
     try:
-        return SubscriptionService.cancel(db, current_user.tenant_id)
+        return SubscriptionService.cancel(
+            db,
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -134,7 +170,9 @@ def get_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the full subscription history for the user's tenant."""
-    if not current_user.tenant_id:
-        return []
-    return SubscriptionService.get_history(db, current_user.tenant_id)
+    """Return the full subscription history for the user or tenant."""
+    return SubscriptionService.get_history(
+        db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+    )

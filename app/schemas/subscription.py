@@ -34,7 +34,8 @@ class CaptureOrderRequest(BaseModel):
 
 class SubscriptionOut(BaseModel):
     id: str
-    tenant_id: str
+    tenant_id: Optional[str] = None
+    user_id: Optional[str] = None
     plan_name: str
     status: str
     amount: float
@@ -50,6 +51,8 @@ class SubscriptionOut(BaseModel):
 
 class SubscriptionHistoryOut(BaseModel):
     id: str
+    tenant_id: Optional[str] = None
+    user_id: Optional[str] = None
     plan_name: str
     status: str
     amount: float
