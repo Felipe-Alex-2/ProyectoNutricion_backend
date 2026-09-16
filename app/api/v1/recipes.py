@@ -256,3 +256,44 @@ def delete_recipe(
     db.add(log)
     db.commit()
     return {"message": "Receta eliminada exitosamente."}
+
+
+@router.post("/{recipe_id}/assign/{patient_id}", response_model=RecipeResponse)
+def assign_recipe_to_patient(
+    recipe_id: str,
+    patient_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Asignar una receta a un paciente específico (ej: desde Asistente IA)."""
+    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
+
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id, Recipe.is_active == True).first()
+    if not recipe:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receta no encontrada.")
+
+    patient = db.query(User).filter(User.id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente no encontrado.")
+
+    existing = db.query(RecipeAssignment).filter(
+        RecipeAssignment.recipe_id == recipe_id,
+        RecipeAssignment.patient_id == patient_id,
+    ).first()
+
+    if not existing:
+        db.add(RecipeAssignment(recipe_id=recipe_id, patient_id=patient_id))
+        db.add(ActivityLog(
+            user_id=current_user.id,
+            user_email=current_user.email,
+            user_name=current_user.full_name,
+            action="RECETA_ASIGNADA",
+            description=f"Se prescribió la receta '{recipe.title}' al paciente '{patient.full_name}'.",
+            category="CLINICAL",
+        ))
+        db.commit()
+        db.refresh(recipe)
+
+    return _recipe_to_response(recipe)
+

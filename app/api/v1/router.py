@@ -12,6 +12,8 @@ from app.api.v1.subscriptions import router as subscriptions_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.appointments import router as appointments_router
 from app.api.v1.notifications import router as notifications_router
+from app.api.v1.backup import router as backup_router
+from app.api.v1.reports import router as reports_router
 
 api_v1_router = APIRouter(prefix="/v1")
 
@@ -28,4 +30,7 @@ api_v1_router.include_router(subscriptions_router)
 api_v1_router.include_router(payments_router)
 api_v1_router.include_router(appointments_router)
 api_v1_router.include_router(notifications_router)
+api_v1_router.include_router(backup_router)
+api_v1_router.include_router(reports_router)
+
 

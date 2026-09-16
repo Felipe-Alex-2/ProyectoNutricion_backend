@@ -13,10 +13,11 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
-from app.schemas.user import UserResponse
+from app.schemas.user import UserResponse, DeveloperKeyVerifyRequest, DeveloperKeyVerifyResponse
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
 from app.api.deps import get_current_user, security_bearer
+from app.core.security import verify_password
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -121,4 +122,57 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     return MessageResponse(
         message="Tu contraseña ha sido restablecida exitosamente. Ya puedes iniciar sesión con tu nueva contraseña."
     )
+
+
+@router.post(
+    "/verify-developer-key",
+    response_model=DeveloperKeyVerifyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verificar llave de desarrollador/administrador para acceder a la bitácora",
+)
+def verify_developer_key(
+    request: DeveloperKeyVerifyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    key_to_test = request.developer_key.strip()
+    # Si el usuario tiene una llave personalizada configurada, validar contra esa
+    if current_user.developer_key_hash:
+        is_valid = verify_password(key_to_test, current_user.developer_key_hash)
+    else:
+        # Si no la ha personalizado, la llave es su misma contraseña de cuenta
+        is_valid = verify_password(key_to_test, current_user.hashed_password)
+
+    if not is_valid:
+        # Registrar intento fallido en bitácora
+        try:
+            db.add(ActivityLog(
+                user_id=current_user.id,
+                user_email=current_user.email,
+                user_name=current_user.full_name,
+                action="INTENTO_LLAVE_BITACORA_FALLIDO",
+                description="Intento fallido de desbloqueo de bitácora confidencial.",
+                category="SECURITY",
+            ))
+            db.commit()
+        except Exception:
+            pass
+        return DeveloperKeyVerifyResponse(valid=False, message="La llave o contraseña de administrador es incorrecta.")
+
+    # Registrar desbloqueo exitoso
+    try:
+        db.add(ActivityLog(
+            user_id=current_user.id,
+            user_email=current_user.email,
+            user_name=current_user.full_name,
+            action="BITACORA_DESBLOQUEADA",
+            description="El usuario autenticó su llave y desbloqueó el módulo de auditoría/bitácora.",
+            category="SECURITY",
+        ))
+        db.commit()
+    except Exception:
+        pass
+
+    return DeveloperKeyVerifyResponse(valid=True, message="Acceso autorizado a la bitácora confidencial.")
+
 

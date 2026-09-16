@@ -37,6 +37,8 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+backups/*.json
+backups/
 
 # Unit test / coverage
 .pytest_cache/

@@ -20,6 +20,7 @@ class User(Base):
 
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    developer_key_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
         DateTime,
@@ -31,3 +32,7 @@ class User(Base):
     # Relationships
     role = relationship("Role", back_populates="users")
     tenant = relationship("Tenant", back_populates="users")
+
+    @property
+    def has_custom_developer_key(self) -> bool:
+        return bool(self.developer_key_hash)

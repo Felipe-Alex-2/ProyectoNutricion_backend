@@ -74,6 +74,7 @@ class UserUpdate(BaseModel):
     role_id: Optional[str] = Field(None, description="Rol del usuario")
     tenant_id: Optional[str] = Field(None, description="ID de la organización")
     is_active: Optional[bool] = Field(None, description="Estado de actividad")
+    developer_key: Optional[str] = Field(None, min_length=4, max_length=128, description="Llave personalizada para acceso a bitácora")
 
     @field_validator("password")
     @classmethod
@@ -104,12 +105,22 @@ class UserUpdate(BaseModel):
         return v
 
 
+class DeveloperKeyVerifyRequest(BaseModel):
+    developer_key: str = Field(..., min_length=1, description="Llave del administrador o desarrollador para la bitácora")
+
+
+class DeveloperKeyVerifyResponse(BaseModel):
+    valid: bool
+    message: str
+
+
 class UserResponse(UserBase):
     id: str
     role_id: str
     tenant_id: Optional[str] = None
     is_active: bool
     is_verified: bool
+    has_custom_developer_key: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
 

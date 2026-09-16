@@ -13,6 +13,7 @@ from app.schemas.clinical import (
     ClinicalRecordCreateOrUpdate,
     ClinicalRecordResponse,
 )
+from app.schemas.ai_recommendation import AIRecommendationResponse
 
 router = APIRouter(prefix="/clinical", tags=["Clínica y Anamnesis"])
 
@@ -165,3 +166,44 @@ def create_clinical_record(
     db.commit()
     db.refresh(record)
     return record
+
+
+# =====================================================================
+# 3. ASISTENTE INTELIGENTE (IA DE RECOMENDACIÓN NUTRICIONAL)
+# =====================================================================
+
+@router.get("/patients/{patient_id}/ai-recommendations", response_model=AIRecommendationResponse)
+def get_ai_recipe_recommendations(
+    patient_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Asistente Inteligente IA para apoyo al nutricionista: analiza anamnesis,
+    historial, alergias y metas del paciente para recomendar recetas con justificación médica.
+    """
+    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a herramientas de prescripción clínica.")
+
+    try:
+        from app.services.ai_recommendation_service import AIRecommendationService
+        result = AIRecommendationService.recommend_for_patient(db, patient_id, nutritionist_id=current_user.id)
+        
+        # Auditoría en bitácora
+        log = ActivityLog(
+            user_id=current_user.id,
+            user_email=current_user.email,
+            user_name=current_user.full_name,
+            action="IA_RECOMENDACION_SOLICITADA",
+            description=f"El especialista consultó el Asistente IA de prescripción para el paciente '{result.patient_name}'.",
+            category="AI_CLINICAL",
+        )
+        db.add(log)
+        db.commit()
+
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al generar recomendaciones IA: {str(e)}")
+

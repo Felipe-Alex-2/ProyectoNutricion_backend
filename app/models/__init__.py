@@ -11,6 +11,7 @@ from app.models.subscription import Subscription
 from app.models.payment import Payment
 from app.models.appointment import Appointment
 from app.models.notification import Notification
+from app.models.backup import BackupSetting, BackupLog
 
 __all__ = [
     "Base",
@@ -30,4 +31,6 @@ __all__ = [
     "Payment",
     "Appointment",
     "Notification",
+    "BackupSetting",
+    "BackupLog",
 ]
