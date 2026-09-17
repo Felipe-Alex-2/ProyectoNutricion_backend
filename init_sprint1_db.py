@@ -1,12 +1,14 @@
 import sys
 from sqlalchemy import text, inspect
 from app.database import get_engine, Base, get_session_local
+import app.models
 from app.models.tenant import Tenant
 from app.models.rbac import Role, Permission, RolePermission
 from app.models.user import User
 from app.models.patient_link import PatientNutritionistLink
 from app.models.appointment import Appointment
 from app.models.notification import Notification
+from app.models.backup import BackupSetting, BackupLog
 
 
 def init_db():
@@ -46,6 +48,10 @@ def init_db():
             if 'tenant_id' not in existing_user_cols:
                 print("Adding column 'tenant_id' to 'users' table...")
                 conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id VARCHAR(36);"))
+                conn.commit()
+            if 'developer_key_hash' not in existing_user_cols:
+                print("Adding column 'developer_key_hash' to 'users' table...")
+                conn.execute(text("ALTER TABLE users ADD COLUMN developer_key_hash VARCHAR(255);"))
                 conn.commit()
 
     if 'payments' in insp.get_table_names():
