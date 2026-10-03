@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -17,6 +17,7 @@ class Appointment(Base):
     reason = Column(Text, nullable=True)
     status = Column(String(20), default="PENDING", nullable=False)  # PENDING, CONFIRMED, CANCELLED
     cancellation_reason = Column(Text, nullable=True)
+    reminder_sent = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(

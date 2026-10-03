@@ -308,7 +308,17 @@ class SubscriptionService:
         else:
             return None
 
-        return query.order_by(Subscription.created_at.desc()).first()
+        sub = query.order_by(Subscription.created_at.desc()).first()
+        if sub and sub.expires_at:
+            now = datetime.now(timezone.utc)
+            expires_at = sub.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at < now:
+                sub.status = "EXPIRED"  # type: ignore[assignment]
+                db.commit()
+                return None
+        return sub
 
     @staticmethod
     def get_history(

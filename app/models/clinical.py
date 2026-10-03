@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -12,10 +12,20 @@ class PatientAnamnesis(Base):
     patient_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
     tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # Datos biométricos y ML
+    birth_date = Column(DateTime, nullable=True)  # Fecha de nacimiento para cálculo de edad
+    gender = Column(String(10), default="M", nullable=False)  # M o F
+    weight_kg = Column(Float, default=70.0, nullable=True)  # Peso actual en kg
+    height_cm = Column(Float, default=170.0, nullable=True)  # Talla en cm
+    target_weight_kg = Column(Float, nullable=True)  # Peso objetivo en kg
+    target_weeks = Column(Integer, nullable=True)  # Plazo en semanas
+
     # Antecedentes médicos y alergias (Texto o listas separadas por comas)
     pathologies = Column(Text, nullable=True)  # Hipertensión, Diabetes, etc.
     allergies = Column(Text, nullable=True)  # Lactosa, Gluten, Mariscos, etc.
     medications = Column(Text, nullable=True)  # Fármacos o suplementos actuales
+    other_allergies = Column(Text, nullable=True)  # Otros alérgenos ingresados manualmente
+    other_pathologies = Column(Text, nullable=True)  # Otros antecedentes patológicos
 
     # Hábitos de vida y estilo
     water_intake_liters = Column(Float, default=1.5, nullable=False)
@@ -24,11 +34,18 @@ class PatientAnamnesis(Base):
     coffee_cups = Column(Integer, default=1, nullable=False)
     sleep_hours = Column(Float, default=7.0, nullable=False)
 
+    # Sistema experto y porciones
+    fruits_vegetables_daily = Column(Integer, default=3, nullable=True)  # Porciones al día (0-10)
+    sugary_drinks_weekly = Column(Integer, default=0, nullable=True)  # Bebidas azucaradas a la semana
+    meals_per_day = Column(Integer, default=4, nullable=True)  # Comidas al día
+    is_pregnant_or_lactating = Column(Boolean, default=False, nullable=True)  # Embarazo o lactancia (F)
+
     # Actividad física y digestión
     physical_activity = Column(String(50), default="Ligero", nullable=False)  # Sedentario, Ligero, Moderado, Intenso
     digestive_symptoms = Column(Text, nullable=True)  # Estreñimiento, acidez, reflujo, distensión, etc.
-    food_preferences = Column(Text, nullable=True)  # Alimentos favoritos, rechazados, dieta omnívora/vegana, etc.
+    food_preferences = Column(Text, nullable=True)  # Alimentos favoritos, rechazados, etc.
     goal = Column(String(200), default="Pérdida de grasa", nullable=False)  # Pérdida de grasa, Masa muscular, etc.
+    consent_data_processing = Column(Boolean, default=True, nullable=False)  # Consentimiento de datos de salud
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(

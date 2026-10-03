@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     PAYPAL_CLIENT_SECRET: str = ""
     PAYPAL_BASE_URL: str = "https://api-m.sandbox.paypal.com"
 
+    # Gemini AI
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+
+    # Firebase Cloud Messaging
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_CLIENT_EMAIL: str = ""
+    FIREBASE_PRIVATE_KEY: str = ""
+
     # CORS — stored as plain str so pydantic-settings never calls json.loads() on it.
     # Railway: set CORS_ORIGINS=https://your-app.com,https://other.com  (comma-separated)
     # OR leave unset to use the default localhost origins.

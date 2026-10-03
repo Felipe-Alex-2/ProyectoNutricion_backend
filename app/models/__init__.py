@@ -12,6 +12,19 @@ from app.models.payment import Payment
 from app.models.appointment import Appointment
 from app.models.notification import Notification
 from app.models.backup import BackupSetting, BackupLog
+from app.models.ai_nutrition import (
+    ConditionCatalog,
+    AnamnesisCondition,
+    Food,
+    FoodTag,
+    ExclusionRule,
+    HabitParameter,
+    AutomationConfig,
+    NutritionalPlan,
+    ChatMessage,
+    FoodRecord,
+    DeviceToken,
+)
 
 __all__ = [
     "Base",
@@ -33,4 +46,15 @@ __all__ = [
     "Notification",
     "BackupSetting",
     "BackupLog",
+    "ConditionCatalog",
+    "AnamnesisCondition",
+    "Food",
+    "FoodTag",
+    "ExclusionRule",
+    "HabitParameter",
+    "AutomationConfig",
+    "NutritionalPlan",
+    "ChatMessage",
+    "FoodRecord",
+    "DeviceToken",
 ]
