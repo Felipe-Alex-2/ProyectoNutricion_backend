@@ -21,13 +21,16 @@ class UserService:
     @staticmethod
     def create(db: Session, obj_in: UserCreate, role_id: Optional[str] = None) -> User:
         """Create a new user with hashed password."""
+        phone_val = getattr(obj_in, "phone", None)
+        tenant_id_val = getattr(obj_in, "tenant_id", None)
+        obj_role = getattr(obj_in, "role_id", None)
         db_obj = User(
             email=obj_in.email.lower().strip(),
             hashed_password=get_password_hash(obj_in.password),
             full_name=obj_in.full_name.strip(),
-            phone=obj_in.phone.strip() if obj_in.phone else None,
-            role_id=role_id or obj_in.role_id or "ADMIN_SAAS",
-            tenant_id=obj_in.tenant_id,
+            phone=phone_val.strip() if phone_val else None,
+            role_id=role_id or obj_role or "ADMIN_SAAS",
+            tenant_id=tenant_id_val,
             is_active=True,
             is_verified=False,
         )

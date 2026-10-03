@@ -18,19 +18,31 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+hash_password = get_password_hash
+
+
+def create_access_token(
+    subject: Optional[Union[str, Any]] = None,
+    expires_delta: Optional[timedelta] = None,
+    data: Optional[Dict[str, Any]] = None,
+) -> str:
     """Create a signed JWT access token."""
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode: Dict[str, Any] = {
-        "sub": str(subject),
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "access",
-    }
+    to_encode: Dict[str, Any] = {}
+    if data:
+        to_encode.update(data)
+    if subject is not None:
+        to_encode["sub"] = str(subject)
+
+    to_encode["exp"] = expire
+    to_encode["iat"] = datetime.now(timezone.utc)
+    if "type" not in to_encode:
+        to_encode["type"] = "access"
+
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 

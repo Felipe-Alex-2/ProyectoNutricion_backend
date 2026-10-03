@@ -7,6 +7,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr = Field(..., description="Correo electrónico válido para registro")
     password: str = Field(..., min_length=8, max_length=128, description="Contraseña de acceso (mínimo 8 caracteres)")
     full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo")
+    phone: Optional[str] = Field(None, description="Número de teléfono")
     client_platform: Optional[str] = Field("web", description="Plataforma de origen: 'web' o 'mobile'")
 
     @field_validator("password")
