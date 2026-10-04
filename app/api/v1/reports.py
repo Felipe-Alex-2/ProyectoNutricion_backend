@@ -12,6 +12,10 @@ from app.schemas.report import (
     ReportEntityMeta,
     ReportQueryRequest,
     ReportQueryResponse,
+    VoiceReportCommandRequest,
+    VoiceReportCommandResponse,
+    VoiceReportSummaryRequest,
+    VoiceReportSummaryResponse,
 )
 from app.services.report_service import ReportService
 from app.core.exceptions import ForbiddenException
@@ -46,6 +50,42 @@ def query_report(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error consultando reporte: {str(e)}")
+
+
+@router.post("/voice-command", response_model=VoiceReportCommandResponse)
+def execute_voice_report_command(
+    request: VoiceReportCommandRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Interpreta un comando o solicitud por voz para Reportes Dinámicos usando la API de Gemini,
+    mapeando la intención a la entidad y filtros correspondientes y retornando la vista previa.
+    """
+    ensure_staff(current_user)
+    if not request.transcript or not request.transcript.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El audio transcrito no contiene texto.")
+
+    try:
+        result = ReportService.interpret_voice_command(request.transcript.strip(), current_user, db)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al procesar comando por voz: {str(e)}")
+
+
+@router.post("/voice-summary", response_model=VoiceReportSummaryResponse)
+def generate_voice_summary(
+    request: VoiceReportSummaryRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Genera una síntesis ejecutiva hablada con Gemini API a partir de los datos del reporte para ser locutada por voz (TTS).
+    """
+    ensure_staff(current_user)
+    try:
+        return ReportService.generate_voice_summary(request)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error generando resumen por voz: {str(e)}")
 
 
 @router.post("/export/excel")

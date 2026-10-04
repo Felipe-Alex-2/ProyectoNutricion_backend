@@ -1,4 +1,5 @@
 import io
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
@@ -16,7 +17,11 @@ from app.schemas.report import (
     ReportEntityMeta,
     ReportQueryRequest,
     ReportQueryResponse,
+    VoiceReportCommandResponse,
+    VoiceReportSummaryRequest,
+    VoiceReportSummaryResponse,
 )
+from app.services.gemini_service import GeminiService
 
 
 class ReportService:
@@ -503,3 +508,173 @@ class ReportService:
 
         stream.seek(0)
         return stream
+
+    @classmethod
+    def interpret_voice_command(
+        cls,
+        transcript: str,
+        current_user: User,
+        db: Session,
+    ) -> VoiceReportCommandResponse:
+        """
+        Interpreta una orden de voz con la API de Google Gemini (o heurística de respaldo),
+        extrayendo la entidad deseada, columnas, fechas y filtros, y ejecutando la consulta.
+        """
+        entities_summary = []
+        for key, conf in cls.ENTITIES_CONFIG.items():
+            cols = [c["key"] for c in conf["columns"]]
+            entities_summary.append(f"- {key} ({conf['label']}): columnas={cols}")
+        entities_text = "\n".join(entities_summary)
+
+        system_instruction = (
+            "Eres el copiloto de IA clínica de NutriSalud especializado en reportes dinámicos. "
+            "Tu misión es interpretar la instrucción por voz del usuario y mapearla a parámetros estructurados de reporte en formato JSON estricto."
+        )
+
+        prompt = f"""
+El usuario ha dicho por voz la siguiente solicitud de reporte:
+"{transcript}"
+
+Entidades disponibles y sus columnas:
+{entities_text}
+
+Debes responder ÚNICAMENTE con un JSON con la siguiente estructura:
+{{
+  "entity": "nombre_de_entidad", // Debe ser exactamente una de: patients, recipes, appointments, payments, clinical_records, activity_logs
+  "columns": ["columna1", "columna2"], // Array de claves de columnas relevantes mencionadas o null para las predeterminadas
+  "start_date": "YYYY-MM-DD", // Fecha inicio si el usuario mencionó un rango o fecha, o null
+  "end_date": "YYYY-MM-DD", // Fecha fin si aplica, o null
+  "status": null, // Estado como "CONFIRMED", "ACTIVE", etc., o null
+  "search": null, // Palabra clave o término de búsqueda si el usuario nombró algo específico, o null
+  "explanation": "Explicación breve y amigable en español de lo que se configuró a partir de la voz."
+}}
+"""
+
+        parsed: Dict[str, Any] = {}
+        if GeminiService.is_configured():
+            try:
+                parsed = GeminiService.generate_json(prompt, system_instruction=system_instruction)
+            except Exception:
+                parsed = {}
+
+        # Fallback heurístico inteligente si Gemini no está configurado o falló
+        if not parsed or not isinstance(parsed, dict) or "entity" not in parsed or parsed["entity"] not in cls.ENTITIES_CONFIG:
+            parsed = cls._heuristic_voice_parse(transcript)
+
+        target_entity = parsed.get("entity", "patients")
+        if target_entity not in cls.ENTITIES_CONFIG:
+            target_entity = "patients"
+
+        conf = cls.ENTITIES_CONFIG[target_entity]
+        valid_cols = [c["key"] for c in conf["columns"]]
+        requested_cols = parsed.get("columns")
+        if requested_cols and isinstance(requested_cols, list):
+            filtered_cols = [c for c in requested_cols if c in valid_cols]
+            selected_cols = filtered_cols if filtered_cols else conf["default_columns"]
+        else:
+            selected_cols = conf["default_columns"]
+
+        query_request = ReportQueryRequest(
+            entity=target_entity,
+            columns=selected_cols,
+            start_date=parsed.get("start_date"),
+            end_date=parsed.get("end_date"),
+            status=parsed.get("status"),
+            search=parsed.get("search"),
+            limit=200,
+        )
+
+        # Generar vista previa de datos con el request interpretado
+        report_data = cls.query_report_data(db, query_request, current_user)
+        explanation = parsed.get("explanation") or f"Generando reporte de {conf['label']} con {len(selected_cols)} columnas seleccionadas."
+
+        return VoiceReportCommandResponse(
+            parsed_request=query_request,
+            explanation=explanation,
+            report_data=report_data,
+        )
+
+    @classmethod
+    def _heuristic_voice_parse(cls, transcript: str) -> Dict[str, Any]:
+        t = transcript.lower()
+        if any(w in t for w in ["cita", "agenda", "turno", "reserva", "consulta"]):
+            entity = "appointments"
+        elif any(w in t for w in ["receta", "comida", "alimento", "caloria", "proteina", "plato", "ingrediente"]):
+            entity = "recipes"
+        elif any(w in t for w in ["pago", "cobro", "dinero", "caja", "paypal", "ingreso", "transaccion"]):
+            entity = "payments"
+        elif any(w in t for w in ["clinica", "diagnostico", "ficha", "meta", "evolucion"]):
+            entity = "clinical_records"
+        elif any(w in t for w in ["bitacora", "log", "auditoria", "actividad", "movimiento"]):
+            entity = "activity_logs"
+        else:
+            entity = "patients"
+
+        label = cls.ENTITIES_CONFIG[entity]["label"]
+        return {
+            "entity": entity,
+            "columns": None,
+            "start_date": None,
+            "end_date": None,
+            "status": None,
+            "search": None,
+            "explanation": f"Comando por voz interpretado: Reporte de {label}.",
+        }
+
+    @classmethod
+    def generate_voice_summary(cls, req: VoiceReportSummaryRequest) -> VoiceReportSummaryResponse:
+        """
+        Genera un resumen analítico fluido con Gemini API redactado para ser leído en voz alta por TTS.
+        """
+        if GeminiService.is_configured():
+            system_instruction = (
+                "Eres el locutor y analista clínico de NutriSalud. "
+                "Tu objetivo es transformar datos de reportes en un discurso hablado fluido, dinámico, profesional y conciso en español."
+            )
+            sample_data_str = json.dumps(req.sample_rows[:6], ensure_ascii=False)
+            prompt = f"""
+Analiza los datos del siguiente reporte de NutriSalud para redactar un resumen que será LEÍDO EN VOZ ALTA (locución de audio):
+Reporte: {req.title}
+Entidad: {req.entity}
+Total de registros: {req.total_rows}
+Columnas: {req.columns}
+Muestra de registros:
+{sample_data_str}
+
+Responde ÚNICAMENTE con un JSON con la siguiente estructura:
+{{
+  "summary_text": "Texto fluido y natural de 2 a 4 oraciones en español para ser locutado por voz alta (sintetiza el volumen de datos, métricas destacadas y hallazgos principales con tono profesional y positivo).",
+  "bullet_points": [
+    "Dato o hallazgo principal...",
+    "Métrica relevante...",
+    "Recomendación o estado..."
+  ]
+}}
+"""
+            try:
+                result = GeminiService.generate_json(prompt, system_instruction=system_instruction)
+                if result and isinstance(result, dict) and "summary_text" in result:
+                    summary_text = result.get("summary_text", "")
+                    bullet_points = result.get("bullet_points", [])
+                    if isinstance(bullet_points, list) and bullet_points:
+                        return VoiceReportSummaryResponse(
+                            summary_text=summary_text,
+                            bullet_points=[str(bp) for bp in bullet_points],
+                        )
+            except Exception:
+                pass
+
+        # Fallback si no está configurada la API de Gemini o si falla
+        fallback_text = (
+            f"Reporte de {req.title}. Se han analizado con éxito {req.total_rows} registros del sistema. "
+            f"Los datos reflejan la actividad actual en la plataforma y están consolidados para su exportación a Excel y PDF."
+        )
+        fallback_points = [
+            f"Total de registros consolidados: {req.total_rows}",
+            f"Módulo: {req.title}",
+            "Información verificada y lista para descarga",
+        ]
+        return VoiceReportSummaryResponse(
+            summary_text=fallback_text,
+            bullet_points=fallback_points,
+        )

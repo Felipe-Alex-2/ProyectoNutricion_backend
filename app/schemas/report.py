@@ -35,3 +35,26 @@ class ReportQueryResponse(BaseModel):
     columns: List[ReportColumnMeta]
     rows: List[Dict[str, Any]]
     total_rows: int
+
+
+class VoiceReportCommandRequest(BaseModel):
+    transcript: str = Field(..., description="Texto dictado o instrucción por voz del usuario")
+
+
+class VoiceReportCommandResponse(BaseModel):
+    parsed_request: ReportQueryRequest
+    explanation: str
+    report_data: Optional[ReportQueryResponse] = None
+
+
+class VoiceReportSummaryRequest(BaseModel):
+    entity: str
+    title: str
+    total_rows: int
+    columns: List[str]
+    sample_rows: List[Dict[str, Any]]
+
+
+class VoiceReportSummaryResponse(BaseModel):
+    summary_text: str
+    bullet_points: List[str]
