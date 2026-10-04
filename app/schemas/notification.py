@@ -20,3 +20,11 @@ class NotificationOut(BaseModel):
 
 class NotificationCountOut(BaseModel):
     unread_count: int
+
+
+class NotificationCreate(BaseModel):
+    user_id: str
+    title: str
+    message: str
+    type: str = "SISTEMA"
+    reference_id: Optional[str] = None

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.notification import NotificationOut, NotificationCountOut
+from app.schemas.notification import NotificationOut, NotificationCountOut, NotificationCreate
 from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -32,6 +32,26 @@ def get_unread_notification_count(
     """
     count = NotificationService.get_unread_count(db=db, user_id=current_user.id)
     return NotificationCountOut(unread_count=count)
+
+
+@router.post("/send", response_model=NotificationOut)
+def send_notification(
+    payload: NotificationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Envía una notificación a un usuario (ej. encuesta de hábitos o respuesta de encuesta).
+    """
+    return NotificationService.create_notification(
+        db=db,
+        user_id=payload.user_id,
+        title=payload.title,
+        message=payload.message,
+        type=payload.type,
+        reference_id=payload.reference_id,
+        tenant_id=current_user.tenant_id,
+    )
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationOut)

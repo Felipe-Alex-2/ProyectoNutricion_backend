@@ -43,12 +43,16 @@ def get_current_subscription(
     current_user: User = Depends(get_current_user),
 ):
     """Return the active subscription for the user or user's tenant, or null."""
-    # Check user-level subscription first (Mobile Patient)
+    # Check user-level subscription first (Mobile Patient / Individual Client)
     active_sub = SubscriptionService.get_active(db, user_id=current_user.id)
-    if active_sub:
+    if active_sub and active_sub.plan_name == "CLIENTE_PREMIUM":
         return active_sub
 
-    # If tenant exists, check tenant-level subscription (SaaS Admin)
+    # Mobile Patients/Clients only have personal subscriptions (CLIENTE_PREMIUM); they never inherit clinic SaaS subscriptions
+    if current_user.role_id in ["PACIENTE", "CLIENTE"]:
+        return None
+
+    # For clinic administrators or SaaS staff, check tenant-level subscription
     if current_user.tenant_id:
         return SubscriptionService.get_active(db, tenant_id=current_user.tenant_id)
 
