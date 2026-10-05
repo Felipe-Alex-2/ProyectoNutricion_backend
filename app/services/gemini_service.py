@@ -35,8 +35,11 @@ class GeminiService:
             logger.info("GEMINI_API_KEY no configurada. Utilizando respuesta estructurada de fallback clínico.")
             return cls._fallback_text_response(prompt)
 
-        model = settings.GEMINI_MODEL or "gemini-2.5-flash"
-        url = f"{cls.BASE_URL}/{model}:generateContent?key={api_key}"
+        primary_model = settings.GEMINI_MODEL or "gemini-flash-lite-latest"
+        candidate_models = [primary_model]
+        for fallback in ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
+            if fallback not in candidate_models:
+                candidate_models.append(fallback)
 
         payload: Dict[str, Any] = {
             "contents": [
@@ -55,25 +58,28 @@ class GeminiService:
                 "parts": [{"text": system_instruction}]
             }
 
-        try:
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=req_data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-            return cls._fallback_text_response(prompt)
-        except Exception as e:
-            logger.warning(f"Error al llamar a Gemini API ({e}). Usando fallback clínico.")
-            return cls._fallback_text_response(prompt)
+        req_data = json.dumps(payload).encode("utf-8")
+        for model_to_try in candidate_models:
+            url = f"{cls.BASE_URL}/{model_to_try}:generateContent?key={api_key}"
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=req_data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    candidates = result.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "")
+            except Exception as e:
+                logger.warning(f"Error llamando a {model_to_try} ({e}). Probando siguiente...")
+                continue
+
+        return cls._fallback_text_response(prompt)
 
     @classmethod
     def generate_json(
@@ -131,10 +137,13 @@ class GeminiService:
             'Si la foto NO muestra comida o alimentos reconocibles, responde estrictamente: {"error": "no_es_comida"}.'
         )
 
-        model = settings.GEMINI_MODEL or "gemini-1.5-flash"
-        url = f"{cls.BASE_URL}/{model}:generateContent?key={api_key}"
+        primary_model = settings.GEMINI_MODEL or "gemini-flash-lite-latest"
+        candidate_models = [primary_model]
+        for fallback in ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash"]:
+            if fallback not in candidate_models:
+                candidate_models.append(fallback)
 
-        payload = {
+        payload_dict = {
             "contents": [
                 {
                     "parts": [
@@ -154,44 +163,43 @@ class GeminiService:
             },
         }
 
-        try:
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=req_data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                candidates = result.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        raw_text = parts[0].get("text", "")
-                        parsed = cls._clean_and_parse_json(raw_text)
-                        if parsed:
-                            return parsed
+        req_data = json.dumps(payload_dict).encode("utf-8")
+        last_error = None
 
-            raise ValueError("No se pudo extraer una respuesta estructurada de la imagen.")
-        except urllib.error.HTTPError as e:
-            error_body = ""
+        for model_to_try in candidate_models:
+            url = f"{cls.BASE_URL}/{model_to_try}:generateContent?key={api_key}"
             try:
-                error_body = e.read().decode("utf-8")
-            except Exception:
-                pass
-            logger.error(f"Error HTTP {e.code} llamando a Gemini ({model}): {error_body}")
-            if e.code == 404:
-                raise ValueError(f"El modelo '{model}' no está disponible o no existe en la API de Google Gemini.")
-            elif e.code in (400, 403):
-                raise ValueError(f"Clave de Gemini API inválida o sin permisos (HTTP {e.code}).")
-            else:
-                raise ValueError(f"Error del servicio de IA de Google (HTTP {e.code}).")
-        except Exception as e:
-            logger.error(f"Error analizando imagen con Gemini API ({e})")
-            if isinstance(e, ValueError):
-                raise
-            raise ValueError(f"Error de comunicación con la IA: {str(e)}")
+                req = urllib.request.Request(
+                    url,
+                    data=req_data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=35) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    candidates = result.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            raw_text = parts[0].get("text", "")
+                            parsed = cls._clean_and_parse_json(raw_text)
+                            if parsed:
+                                return parsed
+            except urllib.error.HTTPError as e:
+                error_body = ""
+                try:
+                    error_body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                logger.warning(f"Error HTTP {e.code} con modelo {model_to_try}: {error_body[:100]}. Intentando siguiente...")
+                last_error = f"HTTP {e.code}: {model_to_try}"
+                continue
+            except Exception as e:
+                logger.warning(f"Error de conexion con {model_to_try}: {e}")
+                last_error = str(e)
+                continue
+
+        raise ValueError(f"No se pudo analizar la imagen con los modelos de IA disponibles ({last_error}).")
 
     @classmethod
     def _clean_and_parse_json(cls, text: str) -> Dict[str, Any]:
