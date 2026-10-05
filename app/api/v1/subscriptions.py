@@ -148,6 +148,30 @@ def validate_sandbox_subscription(
 
 
 # ------------------------------------------------------------------ #
+#  Verify PayPal order status and activate only if paid
+# ------------------------------------------------------------------ #
+@router.post("/verify-order")
+def verify_order(
+    body: CaptureOrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Verifies if PayPal order has been approved or paid.
+    Returns paid=False with a descriptive message if the buyer has not paid yet.
+    Only activates if paid.
+    """
+    result = SubscriptionService.verify_and_capture_order(
+        db,
+        order_id=body.order_id,
+        user_id=current_user.id,
+        tenant_id=current_user.tenant_id,
+    )
+    return result
+
+
+
+# ------------------------------------------------------------------ #
 #  Cancel active subscription
 # ------------------------------------------------------------------ #
 @router.post("/cancel", response_model=SubscriptionOut)

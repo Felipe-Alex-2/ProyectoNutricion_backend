@@ -45,3 +45,30 @@ def get_current_user(
         raise AuthException(detail="User account is inactive")
 
     return user
+
+
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Optional dependency to retrieve authenticated user if token is provided."""
+    if not credentials:
+        return None
+
+    token = credentials.credentials
+    if AuthService.is_token_blacklisted(db, token):
+        return None
+
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        return None
+
+    user_id: Optional[str] = payload.get("sub")
+    if not user_id:
+        return None
+
+    user = UserService.get_by_id(db, user_id)
+    if not user or not user.is_active:
+        return None
+
+    return user

@@ -30,17 +30,21 @@ class TenantService:
 
     @staticmethod
     def create(db: Session, data: TenantCreate) -> Tenant:
-        # Check name uniqueness (máx 250 car ya validado en schema)
-        clean_name = data.name.strip()
+        # Validacion 1: Campos vacios
+        clean_name = data.name.strip() if data.name else ""
+        clean_code = data.code.strip().upper() if data.code else ""
+        if not clean_name or not clean_code:
+            raise ConflictException("No se puede crear la sucursal con campos vacios. Debe ingresar el nombre y el codigo identificador.")
+
+        # Validacion 2: Nombre unico
         existing_name = db.query(Tenant).filter(func.lower(Tenant.name) == clean_name.lower()).first()
         if existing_name:
-            raise ConflictException(f"Ya existe una organización con el nombre '{clean_name}'. No se puede repetir el mismo nombre.")
+            raise ConflictException(f"Ya existe una sucursal con el nombre '{clean_name}'. No se permite duplicar nombres de sucursales.")
 
-        # Check code uniqueness
-        clean_code = data.code.strip().upper()
+        # Validacion 3: Codigo unico
         existing = db.query(Tenant).filter(Tenant.code == clean_code).first()
         if existing:
-            raise ConflictException(f"Ya existe un tenant con el código '{clean_code}'")
+            raise ConflictException(f"Ya existe una sucursal con el codigo '{clean_code}'. No se permite duplicar codigos de sucursales.")
 
         tenant = Tenant(
             name=clean_name,
@@ -65,12 +69,14 @@ class TenantService:
 
         if "name" in update_data and update_data["name"]:
             clean_name = update_data["name"].strip()
+            if not clean_name:
+                raise ConflictException("El nombre de la sucursal no puede estar vacio.")
             existing_name = db.query(Tenant).filter(
                 func.lower(Tenant.name) == clean_name.lower(),
                 Tenant.id != tenant_id,
             ).first()
             if existing_name:
-                raise ConflictException(f"Ya existe otra organización con el nombre '{clean_name}'. No se puede repetir el mismo nombre.")
+                raise ConflictException(f"Ya existe otra sucursal con el nombre '{clean_name}'. No se permite duplicar nombres de sucursales.")
             update_data["name"] = clean_name
 
         for key, value in update_data.items():

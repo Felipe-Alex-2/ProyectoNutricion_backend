@@ -4,10 +4,11 @@ Point-of-Sale Payments Router (Caja y Cobros con PayPal Sandbox).
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_user_optional
 from app.models.user import User
 from app.schemas.payment import (
     PaymentCaptureRequest,
@@ -47,7 +48,7 @@ def create_pos_payment(
 def capture_pos_payment(
     body: PaymentCaptureRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Captura y confirma el cobro tras la aprobación del cliente en PayPal Sandbox.
@@ -111,4 +112,21 @@ def cancel_payment(
     return PaymentService.cancel_payment(
         db=db,
         payment_id=payment_id,
+    )
+
+
+@router.get("/{payment_id}/pdf")
+def export_payment_pdf(
+    payment_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    Genera y descarga el archivo PDF oficial con el Detalle de Pago (comprobante / recibo).
+    """
+    pdf_stream, filename = PaymentService.generate_payment_pdf(db=db, payment_id=payment_id)
+    return StreamingResponse(
+        pdf_stream,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

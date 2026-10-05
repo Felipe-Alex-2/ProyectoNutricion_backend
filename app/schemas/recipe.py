@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RecipeBase(BaseModel):
@@ -8,11 +8,11 @@ class RecipeBase(BaseModel):
     description: Optional[str] = Field(None, description="Breve descripción o resumen")
     image_url: Optional[str] = Field(None, max_length=500, description="URL de la fotografía del platillo")
 
-    calories: float = Field(0.0, ge=0, description="Calorías totales (kcal)")
-    protein: float = Field(0.0, ge=0, description="Proteínas (g)")
-    carbohydrates: float = Field(0.0, ge=0, description="Carbohidratos (g)")
-    fats: float = Field(0.0, ge=0, description="Grasas totales (g)")
-    fiber: float = Field(0.0, ge=0, description="Fibra (g)")
+    calories: float = Field(..., ge=0, description="Calorías totales (kcal) - Obligatorio")
+    protein: float = Field(..., ge=0, description="Proteínas (g) - Obligatorio")
+    carbohydrates: float = Field(..., ge=0, description="Carbohidratos (g) - Obligatorio")
+    fats: float = Field(..., ge=0, description="Grasas totales (g) - Obligatorio")
+    fiber: Optional[float] = Field(0.0, ge=0, description="Fibra (g)")
     sodium: Optional[float] = Field(0.0, ge=0, description="Sodio (mg)")
 
     servings: int = Field(1, ge=1, description="Número de porciones")
@@ -23,6 +23,16 @@ class RecipeBase(BaseModel):
 
     ingredients: str = Field(..., min_length=3, description="Lista de ingredientes con cantidades")
     instructions: str = Field(..., min_length=5, description="Instrucciones paso a paso")
+
+    @field_validator("title", "ingredients", "instructions")
+    @classmethod
+    def validate_not_blank(cls, v: str) -> str:
+        if isinstance(v, str):
+            clean = v.strip()
+            if not clean:
+                raise ValueError("El campo no puede estar vacío ni contener únicamente espacios en blanco")
+            return clean
+        return v
 
 
 class RecipeCreate(RecipeBase):
@@ -53,6 +63,16 @@ class RecipeUpdate(BaseModel):
     is_active: Optional[bool] = None
     assigned_patient_ids: Optional[List[str]] = None
 
+    @field_validator("title", "ingredients", "instructions")
+    @classmethod
+    def validate_optional_not_blank(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            clean = v.strip()
+            if not clean:
+                raise ValueError("El campo no puede estar vacío ni contener únicamente espacios en blanco")
+            return clean
+        return v
+
 
 class RecipeResponse(RecipeBase):
     id: str
@@ -63,6 +83,5 @@ class RecipeResponse(RecipeBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 

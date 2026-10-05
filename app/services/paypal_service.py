@@ -171,3 +171,29 @@ class PayPalService:
             "status": status,
             "raw": data,
         }
+
+    # ------------------------------------------------------------------ #
+    #  Get Order details — query order status
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def get_order(order_id: str) -> Dict[str, Any]:
+        """
+        Get details and status of a PayPal order.
+        """
+        access_token = PayPalService._get_access_token()
+
+        response = httpx.get(
+            f"{settings.PAYPAL_BASE_URL}/v2/checkout/orders/{order_id}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=30.0,
+        )
+
+        if response.status_code not in (200, 201):
+            logger.error(f"PayPal get order failed: {response.status_code} — {response.text}")
+            raise Exception(f"Error consultando orden PayPal: {response.text}")
+
+        return response.json()
+

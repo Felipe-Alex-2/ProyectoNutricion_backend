@@ -7,7 +7,7 @@ and subscription queries.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
 
@@ -244,6 +244,83 @@ class SubscriptionService:
             f"(tenant={subscription.tenant_id}, user={subscription.user_id}, plan={subscription.plan_name}, expires={subscription.expires_at})"
         )
         return subscription
+
+    # ------------------------------------------------------------------ #
+    #  Verify payment before activation
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def verify_and_capture_order(
+        db: Session,
+        order_id: str,
+        user_id: str,
+        tenant_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Verifies if an order has been approved or completed by the buyer in PayPal.
+        If the order is still CREATED / not approved, returns paid=False without activating.
+        If APPROVED, captures the payment and activates the subscription.
+        If COMPLETED, activates the subscription.
+        """
+        try:
+            order_data = PayPalService.get_order(order_id)
+            paypal_status = order_data.get("status", "UNKNOWN")
+        except Exception as e:
+            logger.error(f"Error querying PayPal order {order_id}: {e}")
+            return {
+                "paid": False,
+                "status": "ERROR",
+                "message": f"No se pudo consultar el estado en PayPal: {str(e)}",
+            }
+
+        # Check if buyer has not approved/paid
+        if paypal_status in ("CREATED", "PAYER_ACTION_REQUIRED", "SAVED"):
+            return {
+                "paid": False,
+                "status": paypal_status,
+                "message": "No ha pagado aún. Por favor complete el pago en PayPal en su navegador antes de verificar.",
+            }
+
+        # If APPROVED, capture now
+        capture_id = None
+        if paypal_status == "APPROVED":
+            try:
+                capture_res = PayPalService.capture_order(order_id)
+                if capture_res.get("status") not in ("COMPLETED", "APPROVED"):
+                    return {
+                        "paid": False,
+                        "status": capture_res.get("status", "FAILED"),
+                        "message": "No ha pagado aún o el cobro no pudo completarse en PayPal.",
+                    }
+                capture_id = capture_res.get("capture_id")
+            except Exception as e:
+                return {
+                    "paid": False,
+                    "status": "CAPTURE_FAILED",
+                    "message": f"Error al procesar el cobro: {str(e)}",
+                }
+        elif paypal_status != "COMPLETED":
+            return {
+                "paid": False,
+                "status": paypal_status,
+                "message": f"El estado de la orden en PayPal es '{paypal_status}'. No ha pagado aún.",
+            }
+
+        # Activate subscription
+        sub = SubscriptionService.direct_activate_client_premium(
+            db,
+            user_id=user_id,
+            order_id=order_id,
+        )
+        if capture_id:
+            sub.paypal_capture_id = capture_id
+            db.commit()
+
+        return {
+            "paid": True,
+            "status": "COMPLETED",
+            "message": "Pago verificado exitosamente. Plan Premium activado.",
+            "subscription": sub,
+        }
 
     # ------------------------------------------------------------------ #
     #  Direct / Sandbox activation for testing

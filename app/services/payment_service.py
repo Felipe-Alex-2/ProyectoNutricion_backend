@@ -4,9 +4,10 @@ Point-of-Sale Payment Service.
 Manages in-branch charges/payments to clients/patients using PayPal Sandbox.
 """
 
+import io
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
@@ -253,3 +254,275 @@ class PaymentService:
         db.commit()
         db.refresh(payment)
         return PaymentService._map_to_out(payment)
+
+    @staticmethod
+    def generate_payment_pdf(db: Session, payment_id: str) -> Tuple[io.BytesIO, str]:
+        """Genera un archivo PDF formal con el Detalle de Pago (comprobante / recibo)."""
+        payment = db.query(Payment).filter(Payment.id == payment_id).first()
+        if not payment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cobro no encontrado",
+            )
+
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+        stream = io.BytesIO()
+        doc = SimpleDocTemplate(
+            stream,
+            pagesize=letter,
+            rightMargin=36,
+            leftMargin=36,
+            topMargin=36,
+            bottomMargin=36,
+        )
+
+        styles = getSampleStyleSheet()
+
+        brand_style = ParagraphStyle(
+            name="BrandTitle",
+            parent=styles["Heading1"],
+            fontName="Helvetica-Bold",
+            fontSize=16,
+            textColor=colors.HexColor("#206443"),
+            spaceAfter=2,
+        )
+        brand_sub = ParagraphStyle(
+            name="BrandSub",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8,
+            textColor=colors.HexColor("#64748b"),
+        )
+        doc_title_style = ParagraphStyle(
+            name="DocTitle",
+            parent=styles["Heading1"],
+            fontName="Helvetica-Bold",
+            fontSize=14,
+            textColor=colors.HexColor("#1e293b"),
+            alignment=2,
+            spaceAfter=2,
+        )
+        doc_folio_style = ParagraphStyle(
+            name="DocFolio",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            textColor=colors.HexColor("#206443"),
+            alignment=2,
+        )
+        section_heading = ParagraphStyle(
+            name="SectionHeading",
+            parent=styles["Heading3"],
+            fontName="Helvetica-Bold",
+            fontSize=10,
+            textColor=colors.HexColor("#206443"),
+            spaceAfter=4,
+        )
+        body_style = ParagraphStyle(
+            name="BodyText",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            textColor=colors.HexColor("#334155"),
+            leading=12,
+        )
+        table_head_style = ParagraphStyle(
+            name="TableHead",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            textColor=colors.white,
+            alignment=1,
+        )
+        table_cell_style = ParagraphStyle(
+            name="TableCell",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            textColor=colors.HexColor("#1e293b"),
+            alignment=1,
+        )
+        table_cell_left = ParagraphStyle(
+            name="TableCellLeft",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            textColor=colors.HexColor("#1e293b"),
+        )
+        total_style = ParagraphStyle(
+            name="TotalText",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            textColor=colors.HexColor("#206443"),
+            alignment=2,
+        )
+        footer_style = ParagraphStyle(
+            name="FooterText",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=7.5,
+            textColor=colors.HexColor("#94a3b8"),
+            alignment=1,
+            leading=10,
+        )
+
+        elements = []
+
+        # 1. Header institucional
+        header_table_data = [
+            [
+                Paragraph("<b>NUTRISALUD</b>", brand_style),
+                Paragraph("<b>DETALLE DE PAGO</b>", doc_title_style),
+            ],
+            [
+                Paragraph("Plataforma Integral de Gestion Nutricional y Clinica", brand_sub),
+                Paragraph(f"Comprobante: #PAG-{payment.id[:8].upper()}", doc_folio_style),
+            ],
+        ]
+        header_table = Table(header_table_data, colWidths=[300, 240])
+        header_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 8))
+        elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#206443"), spaceAfter=10))
+
+        # 2. Informacion de la Sucursal e Informacion del Cobro en dos columnas
+        tenant_name = payment.tenant.name if payment.tenant else "Sucursal General"
+        tenant_code = payment.tenant.code if payment.tenant else "N/A"
+        tenant_phone = payment.tenant.phone if payment.tenant and payment.tenant.phone else "No registrado"
+        tenant_email = payment.tenant.email if payment.tenant and payment.tenant.email else "No registrado"
+        tenant_address = payment.tenant.address if payment.tenant and payment.tenant.address else "No registrada"
+
+        cashier_name = payment.cashier.full_name if payment.cashier else "Administracion"
+        created_str = payment.created_at.strftime("%d/%m/%Y %H:%M") if payment.created_at else "-"
+        paid_str = payment.paid_at.strftime("%d/%m/%Y %H:%M") if payment.paid_at else "Pendiente de Confirmacion"
+
+        status_text = {
+            "COMPLETED": "PAGADO / COMPLETADO",
+            "PENDING": "PENDIENTE DE PAGO",
+            "CANCELLED": "CANCELADO",
+            "FAILED": "FALLIDO",
+        }.get(payment.status, payment.status)
+
+        method_text = "Efectivo (Caja Local)" if payment.payment_method == "EFECTIVO" else "PayPal Sandbox"
+
+        sucursal_info = f"""
+        <b>Nombre:</b> {tenant_name}<br/>
+        <b>Codigo Sucursal:</b> {tenant_code}<br/>
+        <b>Direccion:</b> {tenant_address}<br/>
+        <b>Telefono:</b> {tenant_phone}<br/>
+        <b>Correo:</b> {tenant_email}
+        """
+
+        transaccion_info = f"""
+        <b>Fecha de Registro:</b> {created_str}<br/>
+        <b>Fecha de Pago:</b> {paid_str}<br/>
+        <b>Metodo de Pago:</b> {method_text}<br/>
+        <b>Estado del Cobro:</b> {status_text}<br/>
+        <b>Referencia / Orden:</b> {payment.paypal_order_id or 'Caja Local'}<br/>
+        <b>Atendido por:</b> {cashier_name}
+        """
+
+        two_cols_data = [
+            [
+                Paragraph("<b>DATOS DE LA SUCURSAL</b>", section_heading),
+                Paragraph("<b>DATOS DE LA TRANSACCION</b>", section_heading),
+            ],
+            [
+                Paragraph(sucursal_info, body_style),
+                Paragraph(transaccion_info, body_style),
+            ],
+        ]
+        two_cols_table = Table(two_cols_data, colWidths=[270, 270])
+        two_cols_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BACKGROUND", (0, 1), (0, 1), colors.HexColor("#f8fafc")),
+            ("BACKGROUND", (1, 1), (1, 1), colors.HexColor("#f8fafc")),
+            ("BOX", (0, 1), (0, 1), 0.5, colors.HexColor("#e2e8f0")),
+            ("BOX", (1, 1), (1, 1), 0.5, colors.HexColor("#e2e8f0")),
+            ("PADDING", (0, 1), (-1, -1), 8),
+        ]))
+        elements.append(two_cols_table)
+        elements.append(Spacer(1, 12))
+
+        # 3. Informacion del Paciente / Cliente
+        client_info = f"""
+        <b>Nombre del Paciente / Cliente:</b> {payment.customer_name}<br/>
+        <b>Correo Electronico:</b> {payment.customer_email or 'No especificado'}
+        """
+        client_table_data = [
+            [Paragraph("<b>DATOS DEL CLIENTE</b>", section_heading)],
+            [Paragraph(client_info, body_style)],
+        ]
+        client_table = Table(client_table_data, colWidths=[540])
+        client_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BACKGROUND", (0, 1), (0, 1), colors.HexColor("#f8fafc")),
+            ("BOX", (0, 1), (0, 1), 0.5, colors.HexColor("#e2e8f0")),
+            ("PADDING", (0, 1), (0, 1), 8),
+        ]))
+        elements.append(client_table)
+        elements.append(Spacer(1, 14))
+
+        # 4. Tabla de Detalle del Cobro
+        detail_data = [
+            [
+                Paragraph("N°", table_head_style),
+                Paragraph("Concepto / Descripcion del Servicio", table_head_style),
+                Paragraph("Metodo", table_head_style),
+                Paragraph("Estado", table_head_style),
+                Paragraph("Monto", table_head_style),
+            ],
+            [
+                Paragraph("1", table_cell_style),
+                Paragraph(f"<b>{payment.concept}</b>", table_cell_left),
+                Paragraph(payment.payment_method or "PAYPAL", table_cell_style),
+                Paragraph(status_text, table_cell_style),
+                Paragraph(f"${payment.amount:.2f} {payment.currency}", table_cell_style),
+            ],
+            [
+                Paragraph("", body_style),
+                Paragraph("", body_style),
+                Paragraph("", body_style),
+                Paragraph("<b>TOTAL:</b>", ParagraphStyle(name="TotalLabel", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=10, textColor=colors.HexColor("#206443"), alignment=2)),
+                Paragraph(f"<b>${payment.amount:.2f} {payment.currency}</b>", total_style),
+            ],
+        ]
+
+        detail_table = Table(detail_data, colWidths=[30, 240, 90, 100, 80])
+        detail_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#206443")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("GRID", (0, 0), (-1, 1), 0.5, colors.HexColor("#cbd5e1")),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.white),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("BACKGROUND", (3, 2), (-1, 2), colors.HexColor("#f1f5f9")),
+            ("LINEABOVE", (0, 2), (-1, 2), 1, colors.HexColor("#206443")),
+        ]))
+        elements.append(detail_table)
+        elements.append(Spacer(1, 14))
+
+        # 5. Notas u observaciones si existen
+        if payment.notes:
+            notes_p = Paragraph(f"<b>Notas u Observaciones:</b> {payment.notes}", body_style)
+            elements.append(notes_p)
+            elements.append(Spacer(1, 10))
+
+        # 6. Pie de pagina
+        elements.append(Spacer(1, 16))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cbd5e1"), spaceAfter=8))
+        elements.append(Paragraph("Este comprobante de detalle de pago es un documento oficial emitido por NutriSalud Platform.<br/>Para cualquier consulta respecto a esta transaccion, comuniquese con la sucursal emisora.", footer_style))
+
+        doc.build(elements)
+        stream.seek(0)
+        filename = f"Detalle_Pago_{payment.id[:8].upper()}.pdf"
+        return stream, filename

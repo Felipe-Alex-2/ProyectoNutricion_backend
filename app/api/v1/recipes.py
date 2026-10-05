@@ -95,13 +95,17 @@ def create_recipe(
         Recipe.is_active == True,
     )
     if tenant_id:
-        dup_query = dup_query.filter(Recipe.tenant_id == tenant_id)
+        dup_query = dup_query.filter(
+            (Recipe.tenant_id == tenant_id) | (Recipe.tenant_id == None)
+        )
     else:
-        dup_query = dup_query.filter(Recipe.created_by == current_user.id)
+        dup_query = dup_query.filter(
+            (Recipe.created_by == current_user.id) | (Recipe.tenant_id == None)
+        )
     if dup_query.first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ya existe una receta activa con el nombre '{clean_title}'. No se puede repetir el mismo nombre.",
+            detail=f"Ya existe una receta con el nombre '{clean_title}'. No se permite repetir el mismo nombre.",
         )
 
     recipe = Recipe(
@@ -187,13 +191,17 @@ def update_recipe(
             Recipe.id != recipe.id,
         )
         if recipe.tenant_id:
-            dup_query = dup_query.filter(Recipe.tenant_id == recipe.tenant_id)
+            dup_query = dup_query.filter(
+                (Recipe.tenant_id == recipe.tenant_id) | (Recipe.tenant_id == None)
+            )
         else:
-            dup_query = dup_query.filter(Recipe.created_by == recipe.created_by)
+            dup_query = dup_query.filter(
+                (Recipe.created_by == recipe.created_by) | (Recipe.tenant_id == None)
+            )
         if dup_query.first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Ya existe otra receta activa con el nombre '{clean_title}'. No se puede repetir el mismo nombre.",
+                detail=f"Ya existe otra receta con el nombre '{clean_title}'. No se permite repetir el mismo nombre.",
             )
 
     update_data = data.model_dump(exclude_unset=True, exclude={"assigned_patient_ids"})
