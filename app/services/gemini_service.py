@@ -96,27 +96,42 @@ class GeminiService:
         """Analiza una imagen de comida usando Gemini multimodal vision."""
         api_key = cls.get_api_key()
         if not api_key:
-            logger.info("GEMINI_API_KEY no configurada. Utilizando estimación heurística visual de fallback.")
-            return cls._fallback_image_response()
+            logger.warning("GEMINI_API_KEY no configurada en las variables de entorno.")
+            raise ValueError("El servicio de análisis con IA requiere configurar GEMINI_API_KEY en el servidor.")
 
         import base64
         base64_data = base64.b64encode(image_bytes).decode("utf-8")
 
         default_prompt = (
-            "Analiza la foto de comida. Devuelve SOLO JSON estrictamente en este formato:\n"
+            "Analiza con precisión clínica y nutricional esta fotografía de alimentos o plato de comida.\n"
+            "Identifica todos los alimentos y porciones visibles (ej: una manzana, ensalada, carne, arroz, fruta, postre, bebida, etc.).\n"
+            "Devuelve ÚNICAMENTE un objeto JSON válido sin bloques markdown ni texto adicional con el siguiente formato exacto:\n"
             "{\n"
             '  "alimentos": [\n'
-            '    {"nombre": "Pollo a la plancha", "porcion_aprox_g": 150, "carbohidratos_g": 0, "calorias": 220, "proteinas_g": 35, "grasas_g": 5},\n'
-            '    {"nombre": "Arroz blanco", "porcion_aprox_g": 100, "carbohidratos_g": 28, "calorias": 130, "proteinas_g": 2.5, "grasas_g": 0.5}\n'
+            '    {\n'
+            '      "nombre": "Manzana roja",\n'
+            '      "porcion_aprox_g": 180,\n'
+            '      "calorias": 95,\n'
+            '      "proteinas_g": 0.5,\n'
+            '      "carbohidratos_g": 25.0,\n'
+            '      "grasas_g": 0.3,\n'
+            '      "fibra_g": 4.4\n'
+            '    }\n'
             "  ],\n"
-            '  "total": {"carbohidratos_g": 28, "calorias": 350, "proteinas_g": 37.5, "grasas_g": 5.5},\n'
+            '  "total": {\n'
+            '    "calorias": 95,\n'
+            '    "proteinas_g": 0.5,\n'
+            '    "carbohidratos_g": 25.0,\n'
+            '    "grasas_g": 0.3,\n'
+            '    "fibra_g": 4.4\n'
+            '  },\n'
             '  "confianza": "alta",\n'
-            '  "observaciones": "Plato equilibrado con buena fuente proteica."\n'
+            '  "observaciones": "Fruta fresca rica en fibra y antioxidantes."\n'
             "}\n"
-            'Si la imagen no es comida, devuelve {"error": "no_es_comida"}.'
+            'Si la foto NO muestra comida o alimentos reconocibles, responde estrictamente: {"error": "no_es_comida"}.'
         )
 
-        model = settings.GEMINI_MODEL or "gemini-2.5-flash"
+        model = settings.GEMINI_MODEL or "gemini-1.5-flash"
         url = f"{cls.BASE_URL}/{model}:generateContent?key={api_key}"
 
         payload = {
@@ -135,7 +150,7 @@ class GeminiService:
             ],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 1500,
+                "maxOutputTokens": 2000,
             },
         }
 
@@ -154,11 +169,29 @@ class GeminiService:
                     parts = candidates[0].get("content", {}).get("parts", [])
                     if parts:
                         raw_text = parts[0].get("text", "")
-                        return cls._clean_and_parse_json(raw_text)
-            return cls._fallback_image_response()
+                        parsed = cls._clean_and_parse_json(raw_text)
+                        if parsed:
+                            return parsed
+
+            raise ValueError("No se pudo extraer una respuesta estructurada de la imagen.")
+        except urllib.error.HTTPError as e:
+            error_body = ""
+            try:
+                error_body = e.read().decode("utf-8")
+            except Exception:
+                pass
+            logger.error(f"Error HTTP {e.code} llamando a Gemini ({model}): {error_body}")
+            if e.code == 404:
+                raise ValueError(f"El modelo '{model}' no está disponible o no existe en la API de Google Gemini.")
+            elif e.code in (400, 403):
+                raise ValueError(f"Clave de Gemini API inválida o sin permisos (HTTP {e.code}).")
+            else:
+                raise ValueError(f"Error del servicio de IA de Google (HTTP {e.code}).")
         except Exception as e:
-            logger.warning(f"Error analizando imagen con Gemini API ({e}). Usando fallback.")
-            return cls._fallback_image_response()
+            logger.error(f"Error analizando imagen con Gemini API ({e})")
+            if isinstance(e, ValueError):
+                raise
+            raise ValueError(f"Error de comunicación con la IA: {str(e)}")
 
     @classmethod
     def _clean_and_parse_json(cls, text: str) -> Dict[str, Any]:

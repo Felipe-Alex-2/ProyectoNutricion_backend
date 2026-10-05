@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Gemini AI
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-1.5-flash"
 
     # Firebase Cloud Messaging
     FIREBASE_PROJECT_ID: str = ""

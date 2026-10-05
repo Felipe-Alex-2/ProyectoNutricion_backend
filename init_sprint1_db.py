@@ -84,6 +84,17 @@ def init_db():
                 conn.execute(text("ALTER TABLE appointments ADD COLUMN reminder_sent BOOLEAN DEFAULT FALSE;"))
                 conn.commit()
 
+    if 'food_records' in insp.get_table_names():
+        existing_food_cols = [c['name'] for c in insp.get_columns('food_records')]
+        with eng.connect() as conn:
+            if 'estimated_fiber' not in existing_food_cols:
+                print("Adding column 'estimated_fiber' to 'food_records' table...")
+                try:
+                    conn.execute(text("ALTER TABLE food_records ADD COLUMN estimated_fiber FLOAT DEFAULT 0.0;"))
+                    conn.commit()
+                except Exception as e:
+                    print(f"Notice adding estimated_fiber: {e}")
+
     if 'patient_anamnesis' in insp.get_table_names():
         existing_anam_cols = [c['name'] for c in insp.get_columns('patient_anamnesis')]
         with eng.connect() as conn:

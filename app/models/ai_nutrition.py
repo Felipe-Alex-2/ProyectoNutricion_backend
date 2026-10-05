@@ -146,6 +146,7 @@ class FoodRecord(Base):
     estimated_carbs = Column(Float, default=0.0, nullable=False)
     estimated_protein = Column(Float, default=0.0, nullable=False)
     estimated_fats = Column(Float, default=0.0, nullable=False)
+    estimated_fiber = Column(Float, default=0.0, nullable=False)
     confidence = Column(String(20), default="media", nullable=False)  # alta, media, baja
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

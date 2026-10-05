@@ -55,6 +55,7 @@ class FoodVisionService:
                     calorias=float(item.get("calorias", 0.0)),
                     proteinas_g=float(item.get("proteinas_g", 0.0)),
                     grasas_g=float(item.get("grasas_g", 0.0)),
+                    fibra_g=float(item.get("fibra_g", 0.0)),
                 )
             )
 
@@ -64,6 +65,7 @@ class FoodVisionService:
             carbohidratos_g=float(raw_total.get("carbohidratos_g", sum(f.carbohidratos_g for f in alimentos_list))),
             proteinas_g=float(raw_total.get("proteinas_g", sum(f.proteinas_g for f in alimentos_list))),
             grasas_g=float(raw_total.get("grasas_g", sum(f.grasas_g for f in alimentos_list))),
+            fibra_g=float(raw_total.get("fibra_g", sum(f.fibra_g for f in alimentos_list))),
         )
 
         confidence = analysis_data.get("confianza", "media")
@@ -115,6 +117,7 @@ class FoodVisionService:
             estimated_carbs=totals.carbohidratos_g,
             estimated_protein=totals.proteinas_g,
             estimated_fats=totals.grasas_g,
+            estimated_fiber=totals.fibra_g,
             confidence=confidence,
             notes=observations,
             created_at=datetime.now(timezone.utc),
@@ -166,6 +169,7 @@ class FoodVisionService:
                     estimated_carbs=r.estimated_carbs,
                     estimated_protein=r.estimated_protein,
                     estimated_fats=r.estimated_fats,
+                    estimated_fiber=getattr(r, "estimated_fiber", 0.0) or 0.0,
                     confidence=r.confidence,
                     notes=r.notes,
                     details=details,

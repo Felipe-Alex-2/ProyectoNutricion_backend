@@ -138,6 +138,7 @@ class DetectedFood(BaseModel):
     calorias: float = 0.0
     proteinas_g: float = 0.0
     grasas_g: float = 0.0
+    fibra_g: float = 0.0
 
 
 class FoodAnalysisTotals(BaseModel):
@@ -145,6 +146,7 @@ class FoodAnalysisTotals(BaseModel):
     carbohidratos_g: float = 0.0
     proteinas_g: float = 0.0
     grasas_g: float = 0.0
+    fibra_g: float = 0.0
 
 
 class FoodAnalysisEvaluation(BaseModel):
@@ -174,6 +176,7 @@ class FoodRecordResponse(BaseModel):
     estimated_carbs: float
     estimated_protein: float
     estimated_fats: float
+    estimated_fiber: float = 0.0
     confidence: str
     notes: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
