@@ -1,5 +1,5 @@
 from typing import Generator, Optional
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -14,13 +14,13 @@ security_bearer = HTTPBearer(auto_error=False)
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ) -> User:
-    """Dependency to retrieve authenticated user from Bearer JWT."""
-    if not credentials:
+    """Dependency to retrieve authenticated user from Bearer JWT or query parameter."""
+    token = credentials.credentials if credentials else token_query
+    if not token:
         raise AuthException(detail="Authentication credentials were not provided")
-
-    token = credentials.credentials
 
     # Verify if token is blacklisted
     if AuthService.is_token_blacklisted(db, token):
@@ -49,13 +49,14 @@ def get_current_user(
 
 def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
     """Optional dependency to retrieve authenticated user if token is provided."""
-    if not credentials:
+    token = credentials.credentials if credentials else token_query
+    if not token:
         return None
 
-    token = credentials.credentials
     if AuthService.is_token_blacklisted(db, token):
         return None
 
