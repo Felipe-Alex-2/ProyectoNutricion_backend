@@ -37,6 +37,7 @@ PLANS = {
             {"text": "Ver Plan Nutricional", "included": True},
             {"text": "Recomendación de comidas con IA", "included": False},
             {"text": "Estimación nutricional de Alimentos con IA", "included": False},
+            {"text": "Asistente Nutricional Carlitos IA", "included": False},
         ],
     },
     "CLIENTE_PREMIUM": {
@@ -53,6 +54,7 @@ PLANS = {
             {"text": "Ver Plan Nutricional", "included": True},
             {"text": "Recomendación de comidas con IA", "included": True},
             {"text": "Estimación nutricional de Alimentos con IA", "included": True},
+            {"text": "Asistente Nutricional Carlitos IA", "included": True},
         ],
     },
     "BASICO": {

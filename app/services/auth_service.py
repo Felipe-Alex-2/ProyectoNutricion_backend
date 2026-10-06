@@ -44,9 +44,16 @@ class AuthService:
         platform = getattr(request, "client_platform", "web")
         assigned_role = "CLIENTE" if (platform and platform.lower() == "mobile") else "ADMIN_SAAS"
 
+        # Validar sucursal (tenant_id) si fue proporcionada
+        if request.tenant_id:
+            from app.models.tenant import Tenant
+            tenant = db.query(Tenant).filter(Tenant.id == request.tenant_id, Tenant.is_active.is_(True)).first()
+            if not tenant:
+                raise BadRequestException(detail="La sucursal seleccionada no existe o no está activa.")
+
         user = UserService.create(
             db,
-            obj_in=request,  # matches email, password, full_name
+            obj_in=request,  # matches email, password, full_name, tenant_id
             role_id=assigned_role,
         )
         return user
