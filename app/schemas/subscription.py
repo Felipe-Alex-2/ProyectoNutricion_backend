@@ -64,3 +64,10 @@ class SubscriptionHistoryOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class VerifyOrderResponse(BaseModel):
+    paid: bool
+    status: str
+    message: str
+    subscription: Optional[SubscriptionOut] = None

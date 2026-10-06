@@ -19,6 +19,7 @@ from app.schemas.subscription import (
     SubscriptionHistoryOut,
     SubscriptionOut,
     SubscriptionPlanOut,
+    VerifyOrderResponse,
 )
 from app.services.subscription_service import SubscriptionService
 
@@ -134,15 +135,17 @@ def capture_order(
 # ------------------------------------------------------------------ #
 @router.post("/validate-sandbox", response_model=SubscriptionOut)
 def validate_sandbox_subscription(
+    body: Optional[CaptureOrderRequest] = None,
     order_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Validate and activate Premium directly in Sandbox environment."""
+    target_order_id = (body.order_id if body else None) or order_id
     sub = SubscriptionService.direct_activate_client_premium(
         db,
         user_id=current_user.id,
-        order_id=order_id,
+        order_id=target_order_id,
     )
     return sub
 
@@ -150,7 +153,7 @@ def validate_sandbox_subscription(
 # ------------------------------------------------------------------ #
 #  Verify PayPal order status and activate only if paid
 # ------------------------------------------------------------------ #
-@router.post("/verify-order")
+@router.post("/verify-order", response_model=VerifyOrderResponse)
 def verify_order(
     body: CaptureOrderRequest,
     db: Session = Depends(get_db),
@@ -167,7 +170,15 @@ def verify_order(
         user_id=current_user.id,
         tenant_id=current_user.tenant_id,
     )
-    return result
+    sub_out = None
+    if result.get("subscription"):
+        sub_out = SubscriptionOut.model_validate(result["subscription"])
+    return VerifyOrderResponse(
+        paid=result["paid"],
+        status=result["status"],
+        message=result["message"],
+        subscription=sub_out,
+    )
 
 
 

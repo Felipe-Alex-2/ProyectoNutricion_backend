@@ -149,10 +149,14 @@ class SubscriptionService:
 
         plan = PLANS[plan_name_upper]
 
-        # Build return URL — use frontend URL from settings
-        frontend_url = settings.FRONTEND_URL.rstrip("/")
-        return_url = f"{frontend_url}/paypal-return"
-        cancel_url = f"{frontend_url}/dashboard"
+        # Build return URL — Para suscripciones móviles o CLIENTE_PREMIUM redirigir al resumen de cuenta PayPal Sandbox
+        if plan_name_upper == "CLIENTE_PREMIUM" or not tenant_id:
+            return_url = "https://sandbox.paypal.com/myaccount/summary?intl=0"
+            cancel_url = "https://sandbox.paypal.com/myaccount/summary?intl=0"
+        else:
+            frontend_url = settings.FRONTEND_URL.rstrip("/")
+            return_url = f"{frontend_url}/paypal-return"
+            cancel_url = f"{frontend_url}/dashboard"
 
         # Call PayPal
         paypal_result = PayPalService.create_order(
@@ -279,7 +283,7 @@ class SubscriptionService:
             return {
                 "paid": False,
                 "status": paypal_status,
-                "message": "No ha pagado aún. Por favor complete el pago en PayPal en su navegador antes de verificar.",
+                "message": "Tu orden en PayPal aún no ha sido pagada. Por favor completa el pago de $5.00 USD en el navegador y luego vuelve a presionar verificar.",
             }
 
         # If APPROVED, capture now
@@ -291,20 +295,25 @@ class SubscriptionService:
                     return {
                         "paid": False,
                         "status": capture_res.get("status", "FAILED"),
-                        "message": "No ha pagado aún o el cobro no pudo completarse en PayPal.",
+                        "message": "El cobro no pudo completarse en PayPal. Verifica que tu cuenta tenga fondos disponibles.",
                     }
                 capture_id = capture_res.get("capture_id")
             except Exception as e:
+                err_text = str(e)
+                if any(k in err_text for k in ["INSTRUMENT_DECLINED", "INSUFFICIENT_FUNDS", "DECLINED"]):
+                    user_msg = "El cobro fue rechazado por PayPal. Tu cuenta no cuenta con saldo suficiente o el método de pago no tiene fondos."
+                else:
+                    user_msg = f"Error al procesar el cobro en PayPal: {err_text}"
                 return {
                     "paid": False,
                     "status": "CAPTURE_FAILED",
-                    "message": f"Error al procesar el cobro: {str(e)}",
+                    "message": user_msg,
                 }
         elif paypal_status != "COMPLETED":
             return {
                 "paid": False,
                 "status": paypal_status,
-                "message": f"El estado de la orden en PayPal es '{paypal_status}'. No ha pagado aún.",
+                "message": f"Estado de orden en PayPal: {paypal_status}. Aún no se ha completado el pago.",
             }
 
         # Activate subscription
