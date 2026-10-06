@@ -109,13 +109,14 @@ class GeminiService:
         base64_data = base64.b64encode(image_bytes).decode("utf-8")
 
         default_prompt = (
-            "Analiza con precisión clínica y nutricional esta fotografía de alimentos o plato de comida.\n"
-            "Identifica todos los alimentos y porciones visibles (ej: una manzana, ensalada, carne, arroz, fruta, postre, bebida, etc.).\n"
-            "Devuelve ÚNICAMENTE un objeto JSON válido sin bloques markdown ni texto adicional con el siguiente formato exacto:\n"
+            "Eres un experto en nutricion y vision artificial. Analiza minuciosamente esta fotografia.\n"
+            "Identifica todos los alimentos comestibles visibles: puede ser un plato preparado, una fruta o verdura individual (como una manzana, banana, naranja), un ingrediente, un snack o una bebida.\n"
+            "Si la imagen muestra cualquier alimento comestible o fruta, estima con rigor sus porciones aproximadas y macronutrientes.\n"
+            "Devuelve estrictamente un objeto JSON con este formato:\n"
             "{\n"
             '  "alimentos": [\n'
             '    {\n'
-            '      "nombre": "Manzana roja",\n'
+            '      "nombre": "Nombre del alimento o fruta",\n'
             '      "porcion_aprox_g": 180,\n'
             '      "calorias": 95,\n'
             '      "proteinas_g": 0.5,\n'
@@ -132,9 +133,9 @@ class GeminiService:
             '    "fibra_g": 4.4\n'
             '  },\n'
             '  "confianza": "alta",\n'
-            '  "observaciones": "Fruta fresca rica en fibra y antioxidantes."\n'
+            '  "observaciones": "Descripcion nutricional breve del alimento o plato."\n'
             "}\n"
-            'Si la foto NO muestra comida o alimentos reconocibles, responde estrictamente: {"error": "no_es_comida"}.'
+            'Solo y unicamente si la fotografia NO contiene absolutamente ningun alimento ni elemento comestible (por ejemplo: objetos inanimados, vehiculos, computadoras, personas sin comida), responde: {"error": "no_es_comida"}.'
         )
 
         primary_model = settings.GEMINI_MODEL or "gemini-flash-lite-latest"
@@ -160,6 +161,7 @@ class GeminiService:
             "generationConfig": {
                 "temperature": 0.2,
                 "maxOutputTokens": 2000,
+                "responseMimeType": "application/json",
             },
         }
 
@@ -175,7 +177,7 @@ class GeminiService:
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=35) as resp:
+                with urllib.request.urlopen(req, timeout=45) as resp:
                     result = json.loads(resp.read().decode("utf-8"))
                     candidates = result.get("candidates", [])
                     if candidates:

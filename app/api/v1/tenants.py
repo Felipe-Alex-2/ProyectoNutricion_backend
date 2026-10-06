@@ -19,6 +19,14 @@ def list_tenants(
     return TenantService.get_all(db, active_only=active_only)
 
 
+@router.get("/public", response_model=List[TenantResponse])
+def list_public_tenants(
+    db: Session = Depends(get_db),
+):
+    """Retorna las sucursales/clínicas activas disponibles públicamente para el registro de clientes."""
+    return TenantService.get_all(db, active_only=True)
+
+
 @router.get("/{tenant_id}", response_model=TenantResponse)
 def get_tenant(
     tenant_id: str,

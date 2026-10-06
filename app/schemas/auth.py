@@ -9,6 +9,7 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100, description="Nombre completo")
     phone: Optional[str] = Field(None, description="Número de teléfono")
     client_platform: Optional[str] = Field("web", description="Plataforma de origen: 'web' o 'mobile'")
+    tenant_id: Optional[str] = Field(None, description="ID de la sucursal seleccionada")
 
     @field_validator("password")
     @classmethod
