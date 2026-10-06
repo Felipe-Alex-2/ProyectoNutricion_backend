@@ -31,6 +31,18 @@ async def analyze_food_photo(
     if len(contents) > 10 * 1024 * 1024:  # 10 MB límite seguro
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La imagen no debe superar los 10 MB.")
 
+    # Flutter envia el archivo como application/octet-stream; Gemini necesita el tipo real.
+    if contents[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif contents[:3] == b"\xff\xd8\xff":
+        mime = "image/jpeg"
+    elif contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        mime = "image/webp"
+    elif contents[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1", b"ftypmsf1"):
+        mime = "image/heic"
+    elif not mime.startswith("image/"):
+        mime = "image/jpeg"
+
     try:
         result = FoodVisionService.analyze_food_image(
             db=db,
