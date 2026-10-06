@@ -112,6 +112,8 @@ class AppointmentService:
             query = query.filter(Appointment.patient_id == current_user.id)
         elif current_user.role_id == "NUTRICIONISTA":
             query = query.filter(Appointment.nutritionist_id == current_user.id)
+            if current_user.tenant_id:
+                query = query.filter(Appointment.tenant_id == current_user.tenant_id)
         elif current_user.role_id == "ADMIN_ORGANIZATION":
             if current_user.tenant_id:
                 query = query.filter(Appointment.tenant_id == current_user.tenant_id)
@@ -143,6 +145,14 @@ class AppointmentService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para confirmar esta cita",
             )
+
+        # Validar aislamiento de tenant
+        if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+            if appointment.tenant_id and appointment.tenant_id != current_user.tenant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permisos para confirmar citas pertenecientes a otra clínica u organización.",
+                )
 
         # Validar solapamiento con citas CONFIRMED del mismo especialista (duración de 30 min)
         overlap_start = appointment.scheduled_at - timedelta(minutes=29, seconds=59)
@@ -201,6 +211,14 @@ class AppointmentService:
                 detail="Cita no encontrada",
             )
 
+        # Validar aislamiento de tenant
+        if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+            if appointment.tenant_id and appointment.tenant_id != current_user.tenant_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No tienes permisos para cancelar citas pertenecientes a otra clínica u organización.",
+                )
+
         appointment.status = "CANCELLED"
         appointment.cancellation_reason = reason or "Cancelada por el administrador/especialista"
         appointment.updated_at = datetime.now(timezone.utc)
@@ -244,10 +262,12 @@ class AppointmentService:
         query = db.query(User).filter(User.role_id == "NUTRICIONISTA", User.is_active == True)
         if target_tenant:
             query = query.filter(User.tenant_id == target_tenant)
+        elif current_user.role_id != "ADMIN_SAAS":
+            query = query.filter(User.tenant_id == current_user.tenant_id)
 
         nutritionists = query.all()
-        # Si no hay en ese tenant específico, devolver todos los nutricionistas activos
-        if not nutritionists:
+        # Si es ADMIN_SAAS y no se especificó tenant, permitir ver todos
+        if not nutritionists and current_user.role_id == "ADMIN_SAAS":
             nutritionists = db.query(User).filter(User.role_id == "NUTRICIONISTA", User.is_active == True).all()
 
         return [

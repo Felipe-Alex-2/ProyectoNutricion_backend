@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.notification import NotificationOut, NotificationCountOut, NotificationCreate
+from app.schemas.notification import (
+    NotificationOut,
+    NotificationCountOut,
+    NotificationCreate,
+    BroadcastNotificationCreate,
+    BroadcastNotificationOut,
+)
 from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -41,8 +47,16 @@ def send_notification(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Envía una notificación a un usuario (ej. encuesta de hábitos o respuesta de encuesta).
+    Envía una notificación a un usuario (ej. seguimiento de dieta, cita, etc.).
+    Si el emisor no es ADMIN_SAAS, valida que el destinatario pertenezca a su misma clínica.
     """
+    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+        target_user = db.query(User).filter(User.id == payload.user_id).first()
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Usuario destinatario no encontrado.")
+        if target_user.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=403, detail="No puedes enviar notificaciones a pacientes de otra clínica.")
+
     return NotificationService.create_notification(
         db=db,
         user_id=payload.user_id,
@@ -51,6 +65,51 @@ def send_notification(
         type=payload.type,
         reference_id=payload.reference_id,
         tenant_id=current_user.tenant_id,
+    )
+
+
+@router.post("/broadcast-tenant", response_model=BroadcastNotificationOut)
+def broadcast_tenant_notifications(
+    payload: BroadcastNotificationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Envía una notificación a todos los pacientes (o grupo seleccionado) del tenant.
+    Aparecerá en el Centro de Notificaciones de la aplicación móvil de los clientes.
+    """
+    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para emitir notificaciones a pacientes.",
+        )
+
+    q = db.query(User).filter(User.role_id == "CLIENTE", User.is_active == True)
+    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+        q = q.filter(User.tenant_id == current_user.tenant_id)
+
+    if payload.patient_ids and len(payload.patient_ids) > 0:
+        q = q.filter(User.id.in_(payload.patient_ids))
+
+    patients = q.all()
+    sent_count = 0
+    tenant_id = current_user.tenant_id
+
+    for p in patients:
+        NotificationService.create_notification(
+            db=db,
+            user_id=p.id,
+            title=payload.title,
+            message=payload.message,
+            type=payload.type,
+            reference_id=payload.reference_id,
+            tenant_id=tenant_id,
+        )
+        sent_count += 1
+
+    return BroadcastNotificationOut(
+        sent_count=sent_count,
+        message=f"Se enviaron con éxito {sent_count} notificaciones a los pacientes de la clínica.",
     )
 
 

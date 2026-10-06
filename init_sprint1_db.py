@@ -95,6 +95,23 @@ def init_db():
                 except Exception as e:
                     print(f"Notice adding estimated_fiber: {e}")
 
+    if 'backup_settings' in insp.get_table_names():
+        existing_bs_cols = [c['name'] for c in insp.get_columns('backup_settings')]
+        with eng.connect() as conn:
+            if 'tenant_id' not in existing_bs_cols:
+                print("Adding column 'tenant_id' to 'backup_settings' table...")
+                conn.execute(text("ALTER TABLE backup_settings ADD COLUMN tenant_id VARCHAR(36);"))
+                conn.commit()
+
+    if 'backup_logs' in insp.get_table_names():
+        existing_bl_cols = [c['name'] for c in insp.get_columns('backup_logs')]
+        with eng.connect() as conn:
+            if 'tenant_id' not in existing_bl_cols:
+                print("Adding column 'tenant_id' to 'backup_logs' table...")
+                conn.execute(text("ALTER TABLE backup_logs ADD COLUMN tenant_id VARCHAR(36);"))
+                conn.commit()
+
+
     if 'patient_anamnesis' in insp.get_table_names():
         existing_anam_cols = [c['name'] for c in insp.get_columns('patient_anamnesis')]
         with eng.connect() as conn:
