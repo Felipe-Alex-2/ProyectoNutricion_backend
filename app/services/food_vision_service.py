@@ -41,7 +41,7 @@ class FoodVisionService:
         )
 
         if "error" in analysis_data and analysis_data["error"] == "no_es_comida":
-            raise ValueError("La imagen enviada no parece contener alimentos detectables. Intenta con una toma más clara de tu plato.")
+            raise ValueError("La imagen enviada no parece contener alimentos detectables. Intenta con una toma más clara de tu plato o alimento.")
 
         # 2. Parsear alimentos detectados
         raw_alimentos = analysis_data.get("alimentos", [])
@@ -58,6 +58,9 @@ class FoodVisionService:
                     fibra_g=float(item.get("fibra_g", 0.0)),
                 )
             )
+
+        if not alimentos_list:
+            raise ValueError("No se detectaron alimentos con suficiente claridad. Intenta con una toma más cercana o mejor iluminada.")
 
         raw_total = analysis_data.get("total", {})
         totals = FoodAnalysisTotals(
