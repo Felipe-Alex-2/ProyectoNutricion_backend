@@ -70,6 +70,7 @@ class ReportService:
                 {"key": "scheduled_at", "label": "Fecha y Hora Cita", "type": "date"},
                 {"key": "status", "label": "Estado", "type": "string"},
                 {"key": "reason", "label": "Motivo", "type": "string"},
+                {"key": "cancellation_reason", "label": "Motivo Cancelación", "type": "string"},
                 {"key": "created_at", "label": "Fecha Solicitud", "type": "date"},
             ],
             "default_columns": ["patient_name", "nutritionist_name", "scheduled_at", "status", "reason"],
@@ -79,7 +80,8 @@ class ReportService:
             "description": "Transacciones de suscripciones y servicios PayPal",
             "model": Payment,
             "columns": [
-                {"key": "user_name", "label": "Cliente", "type": "string"},
+                {"key": "customer_name", "label": "Cliente", "type": "string"},
+                {"key": "concept", "label": "Concepto", "type": "string"},
                 {"key": "amount", "label": "Monto", "type": "number"},
                 {"key": "currency", "label": "Moneda", "type": "string"},
                 {"key": "status", "label": "Estado", "type": "string"},
@@ -87,7 +89,7 @@ class ReportService:
                 {"key": "paypal_order_id", "label": "Ref. PayPal", "type": "string"},
                 {"key": "created_at", "label": "Fecha Transacción", "type": "date"},
             ],
-            "default_columns": ["user_name", "amount", "currency", "status", "payment_method", "created_at"],
+            "default_columns": ["customer_name", "concept", "amount", "currency", "status", "payment_method", "created_at"],
         },
         "clinical_records": {
             "label": "Fichas Clínicas y Diagnósticos",
@@ -98,7 +100,9 @@ class ReportService:
                 {"key": "nutritionist_name", "label": "Especialista", "type": "string"},
                 {"key": "diagnosis", "label": "Diagnóstico Clínico", "type": "string"},
                 {"key": "clinical_goals", "label": "Metas Terapéuticas", "type": "string"},
+                {"key": "evolution_notes", "label": "Notas de Evolución", "type": "string"},
                 {"key": "created_at", "label": "Fecha Asiento", "type": "date"},
+                {"key": "updated_at", "label": "Última Actualización", "type": "date"},
             ],
             "default_columns": ["patient_name", "nutritionist_name", "diagnosis", "clinical_goals", "created_at"],
         },
@@ -157,7 +161,8 @@ class ReportService:
         selected_cols_meta = [ReportColumnMeta(**all_cols_dict[k]) for k in selected_keys]
 
         # Determinar tenant efectivo: Para ADMIN_SAAS se usa req.tenant_id (o None para global), para otros su propio tenant
-        effective_tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else req.tenant_id
+        # Determinar tenant efectivo: Para ADMIN_SAAS se usa req.tenant_id (o None para global), para otros su propio tenant
+        effective_tenant_id = (req.tenant_id or "").strip() or None if current_user.role_id == "ADMIN_SAAS" else current_user.tenant_id
 
         # Extraer registros según entidad
         rows: List[Dict[str, Any]] = []
@@ -165,14 +170,21 @@ class ReportService:
         if entity_key == "patients":
             q = db.query(User).filter(User.role_id == "CLIENTE")
             if effective_tenant_id:
-                q = q.filter(User.tenant_id == effective_tenant_id)
+                linked_patient_ids = [
+                    l[0]
+                    for l in db.query(PatientNutritionistLink.patient_id)
+                    .filter(PatientNutritionistLink.tenant_id == effective_tenant_id, PatientNutritionistLink.patient_id.isnot(None))
+                    .all()
+                ]
+                q = q.filter(or_(User.tenant_id == effective_tenant_id, User.id.in_(linked_patient_ids)))
             if req.status:
-                if req.status.lower() == "activo":
+                st = req.status.strip().lower()
+                if st in ["activo", "active", "true", "1"]:
                     q = q.filter(User.is_active == True)
-                elif req.status.lower() == "inactivo":
+                elif st in ["inactivo", "inactive", "false", "0"]:
                     q = q.filter(User.is_active == False)
             if req.search:
-                s = f"%{req.search.lower()}%"
+                s = f"%{req.search.strip().lower()}%"
                 q = q.filter(or_(User.full_name.ilike(s), User.email.ilike(s), User.phone.ilike(s)))
             if req.start_date:
                 q = q.filter(User.created_at >= req.start_date)
@@ -181,7 +193,12 @@ class ReportService:
 
             items = q.order_by(User.created_at.desc()).limit(req.limit).all()
             for u in items:
-                link = db.query(PatientNutritionistLink).filter(PatientNutritionistLink.patient_id == u.id).first()
+                link = (
+                    db.query(PatientNutritionistLink)
+                    .filter(PatientNutritionistLink.patient_id == u.id)
+                    .order_by(PatientNutritionistLink.created_at.desc())
+                    .first()
+                )
                 nutri_name = "Sin asignar"
                 if link and link.nutritionist_id:
                     nutri = db.query(User).filter(User.id == link.nutritionist_id).first()
@@ -201,12 +218,14 @@ class ReportService:
         elif entity_key == "recipes":
             q = db.query(Recipe).filter(Recipe.is_active == True)
             if effective_tenant_id:
-                q = q.filter(Recipe.tenant_id == effective_tenant_id)
+                q = q.filter(or_(Recipe.tenant_id == effective_tenant_id, Recipe.tenant_id.is_(None)))
             if req.search:
-                s = f"%{req.search.lower()}%"
-                q = q.filter(or_(Recipe.title.ilike(s), Recipe.category.ilike(s)))
+                s = f"%{req.search.strip().lower()}%"
+                q = q.filter(or_(Recipe.title.ilike(s), Recipe.category.ilike(s), Recipe.description.ilike(s)))
             if req.status:
-                q = q.filter(Recipe.category == req.status)
+                st = req.status.strip()
+                if st.lower() not in ["active", "activo", "all", "todos"]:
+                    q = q.filter(Recipe.category.ilike(f"%{st}%"))
             if req.start_date:
                 q = q.filter(Recipe.created_at >= req.start_date)
             if req.end_date:
@@ -216,14 +235,14 @@ class ReportService:
             for r in items:
                 rows.append({
                     "title": r.title,
-                    "category": r.category,
-                    "calories": r.calories,
-                    "protein": r.protein,
-                    "carbohydrates": r.carbohydrates,
-                    "fats": r.fats,
-                    "fiber": r.fiber,
-                    "difficulty": r.difficulty,
-                    "servings": r.servings,
+                    "category": r.category or "General",
+                    "calories": r.calories if r.calories is not None else 0,
+                    "protein": r.protein if r.protein is not None else 0,
+                    "carbohydrates": r.carbohydrates if r.carbohydrates is not None else 0,
+                    "fats": r.fats if r.fats is not None else 0,
+                    "fiber": r.fiber if r.fiber is not None else 0,
+                    "difficulty": r.difficulty or "Fácil",
+                    "servings": r.servings if r.servings is not None else 1,
                     "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
                 })
 
@@ -235,8 +254,12 @@ class ReportService:
                     q = q.filter(Appointment.tenant_id == effective_tenant_id)
             elif effective_tenant_id:
                 q = q.filter(Appointment.tenant_id == effective_tenant_id)
-            if req.status:
-                q = q.filter(Appointment.status == req.status.upper())
+            if req.status and req.status.strip().upper() not in ["ALL", "TODAS", "TODOS"]:
+                q = q.filter(Appointment.status == req.status.strip().upper())
+            if req.search:
+                s = f"%{req.search.strip().lower()}%"
+                patient_ids = [u[0] for u in db.query(User.id).filter(User.full_name.ilike(s)).all()]
+                q = q.filter(or_(Appointment.reason.ilike(s), Appointment.patient_id.in_(patient_ids)))
             if req.start_date:
                 q = q.filter(Appointment.scheduled_at >= req.start_date)
             if req.end_date:
@@ -244,14 +267,16 @@ class ReportService:
 
             items = q.order_by(Appointment.scheduled_at.desc()).limit(req.limit).all()
             for a in items:
-                p = db.query(User).filter(User.id == a.patient_id).first()
-                n = db.query(User).filter(User.id == a.nutritionist_id).first()
+                p = a.patient or (db.query(User).filter(User.id == a.patient_id).first() if a.patient_id else None)
+                n = a.nutritionist or (db.query(User).filter(User.id == a.nutritionist_id).first() if a.nutritionist_id else None)
                 rows.append({
                     "patient_name": p.full_name if p else "N/A",
                     "nutritionist_name": n.full_name if n else "N/A",
                     "scheduled_at": a.scheduled_at.strftime("%Y-%m-%d %H:%M") if a.scheduled_at else "",
+                    "appointment_date": a.scheduled_at.strftime("%Y-%m-%d %H:%M") if a.scheduled_at else "",
                     "status": a.status,
                     "reason": a.reason or "Consulta",
+                    "cancellation_reason": a.cancellation_reason or "N/A",
                     "created_at": a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "",
                 })
 
@@ -259,8 +284,11 @@ class ReportService:
             q = db.query(Payment)
             if effective_tenant_id:
                 q = q.filter(Payment.tenant_id == effective_tenant_id)
-            if req.status:
-                q = q.filter(Payment.status == req.status.upper())
+            if req.status and req.status.strip().upper() not in ["ALL", "TODAS", "TODOS"]:
+                q = q.filter(Payment.status == req.status.strip().upper())
+            if req.search:
+                s = f"%{req.search.strip().lower()}%"
+                q = q.filter(or_(Payment.customer_name.ilike(s), Payment.concept.ilike(s), Payment.paypal_order_id.ilike(s)))
             if req.start_date:
                 q = q.filter(Payment.created_at >= req.start_date)
             if req.end_date:
@@ -268,14 +296,16 @@ class ReportService:
 
             items = q.order_by(Payment.created_at.desc()).limit(req.limit).all()
             for p in items:
-                u = db.query(User).filter(User.id == p.user_id).first()
                 rows.append({
-                    "user_name": u.full_name if u else "N/A",
+                    "user_name": p.customer_name or "N/A",
+                    "customer_name": p.customer_name or "N/A",
+                    "concept": p.concept or "Suscripción",
                     "amount": f"{p.amount:.2f}",
-                    "currency": p.currency,
+                    "currency": p.currency or "USD",
                     "status": p.status,
-                    "payment_method": p.payment_method,
+                    "payment_method": p.payment_method or "PAYPAL",
                     "paypal_order_id": p.paypal_order_id or "N/A",
+                    "payment_date": p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else "",
                     "created_at": p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else "",
                 })
 
@@ -287,6 +317,9 @@ class ReportService:
                     q = q.filter(ClinicalRecord.tenant_id == effective_tenant_id)
             elif effective_tenant_id:
                 q = q.filter(ClinicalRecord.tenant_id == effective_tenant_id)
+            if req.search:
+                s = f"%{req.search.strip().lower()}%"
+                q = q.filter(or_(ClinicalRecord.diagnosis.ilike(s), ClinicalRecord.clinical_goals.ilike(s)))
             if req.start_date:
                 q = q.filter(ClinicalRecord.created_at >= req.start_date)
             if req.end_date:
@@ -294,25 +327,30 @@ class ReportService:
 
             items = q.order_by(ClinicalRecord.created_at.desc()).limit(req.limit).all()
             for c in items:
-                p = db.query(User).filter(User.id == c.patient_id).first()
-                n = db.query(User).filter(User.id == c.nutritionist_id).first()
+                p = c.patient or (db.query(User).filter(User.id == c.patient_id).first() if c.patient_id else None)
+                n = c.nutritionist or (db.query(User).filter(User.id == c.nutritionist_id).first() if c.nutritionist_id else None)
                 rows.append({
                     "patient_name": p.full_name if p else "N/A",
                     "nutritionist_name": n.full_name if n else "N/A",
-                    "diagnosis": c.diagnosis,
+                    "diagnosis": c.diagnosis or "Evaluación nutricional",
                     "clinical_goals": c.clinical_goals or "N/A",
+                    "evolution_notes": c.evolution_notes or "N/A",
                     "created_at": c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else "",
+                    "updated_at": c.updated_at.strftime("%Y-%m-%d %H:%M") if c.updated_at else "",
                 })
 
         elif entity_key == "activity_logs":
             q = db.query(ActivityLog)
             if effective_tenant_id:
                 tenant_user_ids = [u[0] for u in db.query(User.id).filter(User.tenant_id == effective_tenant_id).all()]
-                q = q.filter(ActivityLog.user_id.in_(tenant_user_ids))
-            if req.status:
-                q = q.filter(ActivityLog.category == req.status.upper())
+                if tenant_user_ids:
+                    q = q.filter(ActivityLog.user_id.in_(tenant_user_ids))
+                else:
+                    q = q.filter(ActivityLog.id == "none")
+            if req.status and req.status.strip().upper() not in ["ALL", "TODAS", "TODOS"]:
+                q = q.filter(ActivityLog.category == req.status.strip().upper())
             if req.search:
-                s = f"%{req.search.lower()}%"
+                s = f"%{req.search.strip().lower()}%"
                 q = q.filter(or_(ActivityLog.action.ilike(s), ActivityLog.user_name.ilike(s), ActivityLog.description.ilike(s)))
             if req.start_date:
                 q = q.filter(ActivityLog.created_at >= req.start_date)
@@ -324,9 +362,11 @@ class ReportService:
                 rows.append({
                     "user_name": l.user_name or "Sistema",
                     "user_email": l.user_email or "N/A",
-                    "action": l.action,
+                    "action": l.action or "ACTIVIDAD",
                     "category": l.category or "INFO",
+                    "module": l.category or "INFO",
                     "description": l.description or "",
+                    "details": l.description or "",
                     "ip_address": l.ip_address or "Local",
                     "created_at": l.created_at.strftime("%Y-%m-%d %H:%M") if l.created_at else "",
                 })
@@ -624,15 +664,48 @@ Debes responder ÚNICAMENTE con un JSON con la siguiente estructura:
         else:
             entity = "patients"
 
+        status = None
+        if entity == "appointments":
+            if "confirmad" in t:
+                status = "CONFIRMED"
+            elif "pendient" in t:
+                status = "PENDING"
+            elif "cancelad" in t:
+                status = "CANCELLED"
+        elif entity == "patients":
+            if "activ" in t:
+                status = "Activo"
+            elif "inactiv" in t:
+                status = "Inactivo"
+        elif entity == "payments":
+            if "completad" in t or "pagad" in t:
+                status = "COMPLETED"
+            elif "pendient" in t:
+                status = "PENDING"
+        elif entity == "recipes":
+            if "desayuno" in t:
+                status = "Desayuno"
+            elif "almuerzo" in t:
+                status = "Almuerzo"
+            elif "cena" in t:
+                status = "Cena"
+            elif "snack" in t:
+                status = "Snack"
+
         label = cls.ENTITIES_CONFIG[entity]["label"]
+        explanation = f"Comando por voz interpretado: Reporte de {label}"
+        if status:
+            explanation += f" con filtro de estado '{status}'"
+        explanation += "."
+
         return {
             "entity": entity,
             "columns": None,
             "start_date": None,
             "end_date": None,
-            "status": None,
+            "status": status,
             "search": None,
-            "explanation": f"Comando por voz interpretado: Reporte de {label}.",
+            "explanation": explanation,
         }
 
     @classmethod
