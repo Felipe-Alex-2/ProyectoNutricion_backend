@@ -161,7 +161,7 @@ class ReportService:
 
         if entity_key == "patients":
             q = db.query(User).filter(User.role_id == "CLIENTE")
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+            if current_user.role_id != "ADMIN_SAAS":
                 q = q.filter(User.tenant_id == current_user.tenant_id)
             if req.status:
                 if req.status.lower() == "activo":
@@ -197,8 +197,8 @@ class ReportService:
 
         elif entity_key == "recipes":
             q = db.query(Recipe).filter(Recipe.is_active == True)
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
-                q = q.filter((Recipe.tenant_id == current_user.tenant_id) | (Recipe.tenant_id == None))
+            if current_user.role_id != "ADMIN_SAAS":
+                q = q.filter(Recipe.tenant_id == current_user.tenant_id)
             if req.search:
                 s = f"%{req.search.lower()}%"
                 q = q.filter(or_(Recipe.title.ilike(s), Recipe.category.ilike(s)))
@@ -228,7 +228,9 @@ class ReportService:
             q = db.query(Appointment)
             if current_user.role_id == "NUTRICIONISTA":
                 q = q.filter(Appointment.nutritionist_id == current_user.id)
-            elif current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+                if current_user.tenant_id:
+                    q = q.filter(Appointment.tenant_id == current_user.tenant_id)
+            elif current_user.role_id != "ADMIN_SAAS":
                 q = q.filter(Appointment.tenant_id == current_user.tenant_id)
             if req.status:
                 q = q.filter(Appointment.status == req.status.upper())
@@ -252,7 +254,7 @@ class ReportService:
 
         elif entity_key == "payments":
             q = db.query(Payment)
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+            if current_user.role_id != "ADMIN_SAAS":
                 q = q.filter(Payment.tenant_id == current_user.tenant_id)
             if req.status:
                 q = q.filter(Payment.status == req.status.upper())
@@ -278,7 +280,9 @@ class ReportService:
             q = db.query(ClinicalRecord)
             if current_user.role_id == "NUTRICIONISTA":
                 q = q.filter(ClinicalRecord.nutritionist_id == current_user.id)
-            elif current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+                if current_user.tenant_id:
+                    q = q.filter(ClinicalRecord.tenant_id == current_user.tenant_id)
+            elif current_user.role_id != "ADMIN_SAAS":
                 q = q.filter(ClinicalRecord.tenant_id == current_user.tenant_id)
             if req.start_date:
                 q = q.filter(ClinicalRecord.created_at >= req.start_date)
@@ -299,6 +303,9 @@ class ReportService:
 
         elif entity_key == "activity_logs":
             q = db.query(ActivityLog)
+            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+                tenant_user_ids = [u[0] for u in db.query(User.id).filter(User.tenant_id == current_user.tenant_id).all()]
+                q = q.filter(ActivityLog.user_id.in_(tenant_user_ids))
             if req.status:
                 q = q.filter(ActivityLog.category == req.status.upper())
             if req.search:

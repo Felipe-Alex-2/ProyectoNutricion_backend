@@ -17,6 +17,7 @@ class BackupSettingUpdate(BaseModel):
 
 class BackupSettingResponse(BackupSettingBase):
     id: str
+    tenant_id: Optional[str] = None
     last_backup_at: Optional[datetime] = None
     updated_at: datetime
 
@@ -25,6 +26,7 @@ class BackupSettingResponse(BackupSettingBase):
 
 class BackupLogResponse(BaseModel):
     id: str
+    tenant_id: Optional[str] = None
     filename: str
     file_size_bytes: int
     checksum: Optional[str] = None

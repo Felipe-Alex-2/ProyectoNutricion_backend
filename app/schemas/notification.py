@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -28,3 +28,16 @@ class NotificationCreate(BaseModel):
     message: str
     type: str = "SISTEMA"
     reference_id: Optional[str] = None
+
+
+class BroadcastNotificationCreate(BaseModel):
+    title: str
+    message: str
+    type: str = "SEGUIMIENTO_DIETA"
+    patient_ids: Optional[List[str]] = None
+    reference_id: Optional[str] = None
+
+
+class BroadcastNotificationOut(BaseModel):
+    sent_count: int
+    message: str
