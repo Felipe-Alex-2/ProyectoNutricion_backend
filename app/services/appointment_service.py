@@ -28,7 +28,7 @@ class AppointmentService:
             scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
 
         # Validar solapamiento: cada cita dura 30 minutos.
-        # Si el MISMO nutricionista ya tiene una cita CONFIRMADA dentro del rango de 30 minutos:
+        # Si el MISMO nutricionista o el MISMO paciente ya tiene una cita (PENDING o CONFIRMED) dentro de los 30 minutos:
         overlap_start = scheduled_at - timedelta(minutes=29, seconds=59)
         overlap_end = scheduled_at + timedelta(minutes=29, seconds=59)
 
@@ -36,7 +36,7 @@ class AppointmentService:
             db.query(Appointment)
             .filter(
                 Appointment.nutritionist_id == data.nutritionist_id,
-                Appointment.status == "CONFIRMED",
+                Appointment.status.in_(["PENDING", "CONFIRMED"]),
                 Appointment.scheduled_at >= overlap_start,
                 Appointment.scheduled_at <= overlap_end,
             )
@@ -46,7 +46,24 @@ class AppointmentService:
             conf_time = conflicting.scheduled_at.strftime("%H:%M")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"El nutricionista ya tiene una cita confirmada a las {conf_time}. Cada consulta tiene una duración de 30 minutos. Por favor selecciona otro horario.",
+                detail=f"El especialista ya tiene una cita agendada o pendiente a las {conf_time}. Cada consulta tiene una duración de 30 minutos. Por favor selecciona otro horario.",
+            )
+
+        patient_conflicting = (
+            db.query(Appointment)
+            .filter(
+                Appointment.patient_id == current_user.id,
+                Appointment.status.in_(["PENDING", "CONFIRMED"]),
+                Appointment.scheduled_at >= overlap_start,
+                Appointment.scheduled_at <= overlap_end,
+            )
+            .first()
+        )
+        if patient_conflicting:
+            conf_time = patient_conflicting.scheduled_at.strftime("%H:%M")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ya tienes una cita agendada o pendiente a las {conf_time} en ese intervalo de 30 minutos. Por favor selecciona otro horario.",
             )
 
         appointment = Appointment(
