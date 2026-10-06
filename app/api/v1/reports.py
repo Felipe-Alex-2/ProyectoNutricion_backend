@@ -67,7 +67,12 @@ def execute_voice_report_command(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El audio transcrito no contiene texto.")
 
     try:
-        result = ReportService.interpret_voice_command(request.transcript.strip(), current_user, db)
+        result = ReportService.interpret_voice_command(
+            request.transcript.strip(),
+            current_user,
+            db,
+            tenant_id=request.tenant_id,
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al procesar comando por voz: {str(e)}")

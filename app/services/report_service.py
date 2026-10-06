@@ -156,13 +156,16 @@ class ReportService:
 
         selected_cols_meta = [ReportColumnMeta(**all_cols_dict[k]) for k in selected_keys]
 
+        # Determinar tenant efectivo: Para ADMIN_SAAS se usa req.tenant_id (o None para global), para otros su propio tenant
+        effective_tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else req.tenant_id
+
         # Extraer registros según entidad
         rows: List[Dict[str, Any]] = []
 
         if entity_key == "patients":
             q = db.query(User).filter(User.role_id == "CLIENTE")
-            if current_user.role_id != "ADMIN_SAAS":
-                q = q.filter(User.tenant_id == current_user.tenant_id)
+            if effective_tenant_id:
+                q = q.filter(User.tenant_id == effective_tenant_id)
             if req.status:
                 if req.status.lower() == "activo":
                     q = q.filter(User.is_active == True)
@@ -197,8 +200,8 @@ class ReportService:
 
         elif entity_key == "recipes":
             q = db.query(Recipe).filter(Recipe.is_active == True)
-            if current_user.role_id != "ADMIN_SAAS":
-                q = q.filter(Recipe.tenant_id == current_user.tenant_id)
+            if effective_tenant_id:
+                q = q.filter(Recipe.tenant_id == effective_tenant_id)
             if req.search:
                 s = f"%{req.search.lower()}%"
                 q = q.filter(or_(Recipe.title.ilike(s), Recipe.category.ilike(s)))
@@ -228,10 +231,10 @@ class ReportService:
             q = db.query(Appointment)
             if current_user.role_id == "NUTRICIONISTA":
                 q = q.filter(Appointment.nutritionist_id == current_user.id)
-                if current_user.tenant_id:
-                    q = q.filter(Appointment.tenant_id == current_user.tenant_id)
-            elif current_user.role_id != "ADMIN_SAAS":
-                q = q.filter(Appointment.tenant_id == current_user.tenant_id)
+                if effective_tenant_id:
+                    q = q.filter(Appointment.tenant_id == effective_tenant_id)
+            elif effective_tenant_id:
+                q = q.filter(Appointment.tenant_id == effective_tenant_id)
             if req.status:
                 q = q.filter(Appointment.status == req.status.upper())
             if req.start_date:
@@ -254,8 +257,8 @@ class ReportService:
 
         elif entity_key == "payments":
             q = db.query(Payment)
-            if current_user.role_id != "ADMIN_SAAS":
-                q = q.filter(Payment.tenant_id == current_user.tenant_id)
+            if effective_tenant_id:
+                q = q.filter(Payment.tenant_id == effective_tenant_id)
             if req.status:
                 q = q.filter(Payment.status == req.status.upper())
             if req.start_date:
@@ -280,10 +283,10 @@ class ReportService:
             q = db.query(ClinicalRecord)
             if current_user.role_id == "NUTRICIONISTA":
                 q = q.filter(ClinicalRecord.nutritionist_id == current_user.id)
-                if current_user.tenant_id:
-                    q = q.filter(ClinicalRecord.tenant_id == current_user.tenant_id)
-            elif current_user.role_id != "ADMIN_SAAS":
-                q = q.filter(ClinicalRecord.tenant_id == current_user.tenant_id)
+                if effective_tenant_id:
+                    q = q.filter(ClinicalRecord.tenant_id == effective_tenant_id)
+            elif effective_tenant_id:
+                q = q.filter(ClinicalRecord.tenant_id == effective_tenant_id)
             if req.start_date:
                 q = q.filter(ClinicalRecord.created_at >= req.start_date)
             if req.end_date:
@@ -303,8 +306,8 @@ class ReportService:
 
         elif entity_key == "activity_logs":
             q = db.query(ActivityLog)
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
-                tenant_user_ids = [u[0] for u in db.query(User.id).filter(User.tenant_id == current_user.tenant_id).all()]
+            if effective_tenant_id:
+                tenant_user_ids = [u[0] for u in db.query(User.id).filter(User.tenant_id == effective_tenant_id).all()]
                 q = q.filter(ActivityLog.user_id.in_(tenant_user_ids))
             if req.status:
                 q = q.filter(ActivityLog.category == req.status.upper())
@@ -522,6 +525,7 @@ class ReportService:
         transcript: str,
         current_user: User,
         db: Session,
+        tenant_id: Optional[str] = None,
     ) -> VoiceReportCommandResponse:
         """
         Interpreta una orden de voz con la API de Google Gemini (o heurística de respaldo),
@@ -581,6 +585,8 @@ Debes responder ÚNICAMENTE con un JSON con la siguiente estructura:
         else:
             selected_cols = conf["default_columns"]
 
+        effective_tenant = tenant_id if current_user.role_id == "ADMIN_SAAS" else (current_user.tenant_id or tenant_id)
+
         query_request = ReportQueryRequest(
             entity=target_entity,
             columns=selected_cols,
@@ -589,6 +595,7 @@ Debes responder ÚNICAMENTE con un JSON con la siguiente estructura:
             status=parsed.get("status"),
             search=parsed.get("search"),
             limit=200,
+            tenant_id=effective_tenant,
         )
 
         # Generar vista previa de datos con el request interpretado

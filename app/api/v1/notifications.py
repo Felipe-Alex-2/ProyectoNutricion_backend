@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -19,13 +19,15 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 @router.get("", response_model=List[NotificationOut])
 def get_my_notifications(
     limit: int = Query(50, ge=1, le=100),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por organización (ADMIN_SAAS)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene el listado de notificaciones para el usuario en sesión.
     """
-    return NotificationService.get_user_notifications(db=db, user_id=current_user.id, limit=limit)
+    effective_tenant = tenant_id if current_user.role_id == "ADMIN_SAAS" else current_user.tenant_id
+    return NotificationService.get_user_notifications(db=db, user_id=current_user.id, limit=limit, tenant_id=effective_tenant)
 
 
 @router.get("/unread-count", response_model=NotificationCountOut)

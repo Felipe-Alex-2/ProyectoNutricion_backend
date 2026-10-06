@@ -29,14 +29,11 @@ class NotificationService:
         return notification
 
     @staticmethod
-    def get_user_notifications(db: Session, user_id: str, limit: int = 50) -> List[Notification]:
-        return (
-            db.query(Notification)
-            .filter(Notification.user_id == user_id)
-            .order_by(Notification.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+    def get_user_notifications(db: Session, user_id: str, limit: int = 50, tenant_id: Optional[str] = None) -> List[Notification]:
+        query = db.query(Notification).filter(Notification.user_id == user_id)
+        if tenant_id:
+            query = query.filter(Notification.tenant_id == tenant_id)
+        return query.order_by(Notification.created_at.desc()).limit(limit).all()
 
     @staticmethod
     def get_unread_count(db: Session, user_id: str) -> int:

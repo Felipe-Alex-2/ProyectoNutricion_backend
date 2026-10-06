@@ -76,6 +76,7 @@ def update_me(
 def list_patients(
     search: Optional[str] = Query(None, description="Búsqueda por nombre, correo o teléfono"),
     is_active: Optional[bool] = Query(None, description="Filtrar por estado activo"),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por organización / tenant (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -83,7 +84,7 @@ def list_patients(
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para consultar la lista de clientes.")
 
-    tenant_filter = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
+    tenant_filter = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
     patients = UserService.list_patients(
         db,
         tenant_id=tenant_filter,

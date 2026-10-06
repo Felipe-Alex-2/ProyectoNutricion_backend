@@ -52,15 +52,18 @@ def get_my_plan_recipes(
 def list_recipes(
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
     difficulty: Optional[str] = Query(None, description="Filtrar por dificultad"),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por tenant (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Lista las recetas disponibles (activas) con sus pacientes asignados."""
     query = db.query(Recipe).filter(Recipe.is_active == True)
 
-    # Filtrar estrictamente por tenant si el usuario no es ADMIN_SAAS
+    # Filtrar estrictamente por tenant si el usuario no es ADMIN_SAAS, o si ADMIN_SAAS seleccionó un tenant
     if current_user.role_id != "ADMIN_SAAS":
         query = query.filter(Recipe.tenant_id == current_user.tenant_id)
+    elif tenant_id:
+        query = query.filter(Recipe.tenant_id == tenant_id)
 
     if category:
         query = query.filter(Recipe.category == category)

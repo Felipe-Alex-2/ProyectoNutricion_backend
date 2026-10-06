@@ -1,7 +1,7 @@
 import json
 import os
-from typing import List
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -29,25 +29,27 @@ def ensure_backup_access(user: User):
 
 @router.get("/settings", response_model=BackupSettingResponse)
 def get_backup_settings(
+    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
-    return BackupService.get_or_create_settings(db, tenant_id=tenant_id)
+    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    return BackupService.get_or_create_settings(db, tenant_id=effective_tenant)
 
 
 @router.put("/settings", response_model=BackupSettingResponse)
 def update_backup_settings(
     data: BackupSettingUpdate,
+    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
-    updated = BackupService.update_settings(db, data, tenant_id=tenant_id)
+    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    updated = BackupService.update_settings(db, data, tenant_id=effective_tenant)
     try:
-        scope_str = f"Tenant {tenant_id[:8]}" if tenant_id else "Global"
+        scope_str = f"Tenant {effective_tenant[:8]}" if effective_tenant else "Global"
         db.add(ActivityLog(
             user_id=current_user.id,
             user_email=current_user.email,
@@ -64,15 +66,16 @@ def update_backup_settings(
 
 @router.post("/export", response_model=BackupLogResponse)
 def export_backup_manual(
+    tenant_id: Optional[str] = Query(None, description="ID del tenant para respaldo exclusivo (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
-    result = BackupService.create_backup(db, backup_type="MANUAL", user_name=current_user.full_name, tenant_id=tenant_id)
+    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    result = BackupService.create_backup(db, backup_type="MANUAL", user_name=current_user.full_name, tenant_id=effective_tenant)
 
     try:
-        scope_str = f"Tenant {tenant_id[:8]}" if tenant_id else "Global"
+        scope_str = f"Tenant {effective_tenant[:8]}" if effective_tenant else "Global"
         db.add(ActivityLog(
             user_id=current_user.id,
             user_email=current_user.email,
@@ -91,17 +94,18 @@ def export_backup_manual(
 
 @router.get("/history", response_model=List[BackupLogResponse])
 def get_backup_history(
+    tenant_id: Optional[str] = Query(None, description="ID del tenant (ADMIN_SAAS)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
+    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
     # Ejecutar verificación si corresponde copia automática
     try:
-        BackupService.check_and_run_auto_backup(db, tenant_id=tenant_id)
+        BackupService.check_and_run_auto_backup(db, tenant_id=effective_tenant)
     except Exception:
         pass
-    return BackupService.list_backups(db, tenant_id=tenant_id)
+    return BackupService.list_backups(db, tenant_id=effective_tenant)
 
 
 @router.get("/download/{filename}")

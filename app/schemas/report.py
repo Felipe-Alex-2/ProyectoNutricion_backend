@@ -26,6 +26,7 @@ class ReportQueryRequest(BaseModel):
     sort_by: Optional[str] = Field(None, description="Campo para ordenar")
     sort_order: Optional[str] = Field("desc", description="asc o desc")
     limit: Optional[int] = Field(500, ge=1, le=5000, description="Límite de registros")
+    tenant_id: Optional[str] = Field(None, description="Filtro opcional por organización / tenant (ADMIN_SAAS)")
 
 
 class ReportQueryResponse(BaseModel):
@@ -39,6 +40,7 @@ class ReportQueryResponse(BaseModel):
 
 class VoiceReportCommandRequest(BaseModel):
     transcript: str = Field(..., description="Texto dictado o instrucción por voz del usuario")
+    tenant_id: Optional[str] = Field(None, description="Filtro opcional por organización / tenant (ADMIN_SAAS)")
 
 
 class VoiceReportCommandResponse(BaseModel):
