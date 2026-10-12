@@ -1,6 +1,6 @@
 from typing import List
 import json
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/nutricion_db"
     TEST_DATABASE_URL: str = "sqlite:///./test.db"
+
+    BACKUP_DIR: str = "backups"
+    BACKUP_ENCRYPTION_KEY: str = ""
 
     # Security & JWT
     SECRET_KEY: str = "supersecretkeydefault32charactersminimumlengthforsecurity"
@@ -60,6 +63,17 @@ class Settings(BaseSettings):
         "http://localhost:8080,"
         "http://localhost:8000"
     )
+
+    @model_validator(mode="after")
+    def validate_production(self):
+        if self.ENVIRONMENT.lower() in {"production", "prod"}:
+            if len(self.SECRET_KEY) < 32 or self.SECRET_KEY.startswith(("supersecret", "change-this")):
+                raise ValueError("Production requires a unique SECRET_KEY of at least 32 characters.")
+            if len(self.BACKUP_ENCRYPTION_KEY) < 32:
+                raise ValueError("Production requires BACKUP_ENCRYPTION_KEY of at least 32 characters for recoverable encrypted backups.")
+            if not self.cors_origins_list or any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origins_list):
+                raise ValueError("Set explicit production CORS_ORIGINS.")
+        return self
 
     @computed_field
     @property

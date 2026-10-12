@@ -1,5 +1,5 @@
-from typing import Generator, Optional
-from fastapi import Depends, Header, Query
+from typing import Optional
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -14,11 +14,10 @@ security_bearer = HTTPBearer(auto_error=False)
 
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
-    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ) -> User:
-    """Dependency to retrieve authenticated user from Bearer JWT or query parameter."""
-    token = credentials.credentials if credentials else token_query
+    """Dependency to retrieve authenticated user from a Bearer JWT header."""
+    token = credentials.credentials if credentials else None
     if not token:
         raise AuthException(detail="Authentication credentials were not provided")
 
@@ -41,6 +40,8 @@ def get_current_user(
     if not user:
         raise AuthException(detail="User not found")
 
+    if payload.get("sv", 0) != (user.session_version or 0):
+        raise AuthException(detail="Session has been revoked")
     if not user.is_active:
         raise AuthException(detail="User account is inactive")
 
@@ -49,11 +50,10 @@ def get_current_user(
 
 def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
-    token_query: Optional[str] = Query(None, alias="token"),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
     """Optional dependency to retrieve authenticated user if token is provided."""
-    token = credentials.credentials if credentials else token_query
+    token = credentials.credentials if credentials else None
     if not token:
         return None
 
@@ -69,7 +69,7 @@ def get_current_user_optional(
         return None
 
     user = UserService.get_by_id(db, user_id)
-    if not user or not user.is_active:
+    if not user or not user.is_active or payload.get("sv", 0) != (user.session_version or 0):
         return None
 
     return user

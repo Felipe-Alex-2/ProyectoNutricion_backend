@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 from typing import Any, Dict, Optional, Union
 from jose import JWTError, jwt  # type: ignore[import-untyped]
 from passlib.context import CryptContext
@@ -38,6 +39,7 @@ def create_access_token(
     if subject is not None:
         to_encode["sub"] = str(subject)
 
+    to_encode["jti"] = str(uuid4())
     to_encode["exp"] = expire
     to_encode["iat"] = datetime.now(timezone.utc)
     if "type" not in to_encode:
@@ -47,7 +49,7 @@ def create_access_token(
     return encoded_jwt
 
 
-def create_refresh_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+def create_refresh_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None, session_version: int = 0) -> str:
     """Create a signed JWT refresh token."""
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -59,6 +61,8 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: Optional[timed
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "refresh",
+        "jti": str(uuid4()),
+        "sv": session_version,
     }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt

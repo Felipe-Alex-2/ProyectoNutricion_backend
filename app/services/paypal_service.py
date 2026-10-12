@@ -197,3 +197,21 @@ class PayPalService:
 
         return response.json()
 
+
+    @staticmethod
+    def validate_completed_payment(order, expected_amount, expected_currency):
+        from decimal import Decimal, InvalidOperation
+        try:
+            units = order["purchase_units"]
+            captures = units[0]["payments"]["captures"]
+            if len(units) != 1 or len(captures) != 1:
+                raise ValueError("Cantidad inesperada de transacciones.")
+            capture = captures[0]
+            if order.get("status") != "COMPLETED" or capture.get("status") != "COMPLETED" or not capture.get("id"):
+                raise ValueError("PayPal no confirmó un cobro completado.")
+            amount = capture["amount"]
+            if Decimal(amount["value"]) != Decimal(str(expected_amount)) or amount["currency_code"] != expected_currency:
+                raise ValueError("El importe o moneda no coincide con la orden.")
+            return capture
+        except (KeyError, IndexError, TypeError, InvalidOperation):
+            raise ValueError("Respuesta de cobro PayPal incompleta.")

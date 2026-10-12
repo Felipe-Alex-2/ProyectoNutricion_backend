@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from app.models.user import User
 from app.models.patient_link import PatientNutritionistLink
@@ -29,7 +29,7 @@ class UserService:
             hashed_password=get_password_hash(obj_in.password),
             full_name=obj_in.full_name.strip(),
             phone=phone_val.strip() if phone_val else None,
-            role_id=role_id or obj_role or "ADMIN_SAAS",
+            role_id=role_id or obj_role or "CLIENTE",
             tenant_id=tenant_id_val,
             is_active=True,
             is_verified=False,
@@ -50,6 +50,7 @@ class UserService:
             db_obj.phone = obj_in.phone.strip() if obj_in.phone else None
         if obj_in.password is not None:
             db_obj.hashed_password = get_password_hash(obj_in.password)
+            db_obj.session_version = (db_obj.session_version or 0) + 1
         if obj_in.role_id is not None:
             db_obj.role_id = obj_in.role_id
         if obj_in.tenant_id is not None:
@@ -76,12 +77,18 @@ class UserService:
         search: Optional[str] = None,
         is_active: Optional[bool] = None,
         limit: int = 200,
+        offset: int = 0,
     ) -> List[dict]:
         """Obtiene la lista detallada de clientes/pacientes para administración y nutricionistas."""
         query = db.query(User).filter(User.role_id == "CLIENTE")
 
         if tenant_id:
             query = query.filter(User.tenant_id == tenant_id)
+        if nutritionist_id:
+            query = query.filter(User.id.in_(db.query(PatientNutritionistLink.patient_id).filter(
+                PatientNutritionistLink.nutritionist_id == nutritionist_id,
+                PatientNutritionistLink.status == "LINKED",
+            )))
 
         if is_active is not None:
             query = query.filter(User.is_active == is_active)
@@ -96,21 +103,19 @@ class UserService:
                 )
             )
 
-        patients = query.order_by(User.created_at.desc()).limit(limit).all()
+        patients = query.order_by(User.created_at.desc(), User.id).offset(offset).limit(limit).all()
+        links = db.query(PatientNutritionistLink).options(joinedload(PatientNutritionistLink.nutritionist)).filter(
+            PatientNutritionistLink.patient_id.in_([p.id for p in patients]),
+            PatientNutritionistLink.status == "LINKED",
+        ).order_by(PatientNutritionistLink.created_at.desc()).all() if patients else []
+        links_by_patient = {}
+        for link in links:
+            links_by_patient.setdefault(link.patient_id, link)
 
         results = []
         for p in patients:
-            # Buscar vinculación activa
-            link = (
-                db.query(PatientNutritionistLink)
-                .filter(PatientNutritionistLink.patient_id == p.id)
-                .order_by(PatientNutritionistLink.created_at.desc())
-                .first()
-            )
-            nutri_name = None
-            if link and link.nutritionist_id:
-                nutri = db.query(User).filter(User.id == link.nutritionist_id).first()
-                nutri_name = nutri.full_name if nutri else None
+            link = links_by_patient.get(p.id)
+            nutri_name = link.nutritionist.full_name if link and link.nutritionist else None
 
             results.append({
                 "id": p.id,

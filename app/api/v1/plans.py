@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.core.authorization import require_patient_access
 from app.models.ai_nutrition import NutritionalPlan
 from app.services.ai_plan_service import AIPlanService
 from app.schemas.ai_nutrition import (
@@ -23,6 +24,7 @@ def generate_plan_draft(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, data.patient_id, allow_self=True)
     """
     Genera un borrador de plan nutricional determinístico + IA (Mifflin-St Jeor + Gemini + filtro de exclusiones).
     Accesible para nutricionistas, admins y el propio paciente.
@@ -56,6 +58,10 @@ def update_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    existing_plan = db.get(NutritionalPlan, plan_id)
+    if existing_plan is None:
+        raise HTTPException(status_code=404, detail="Plan no encontrado.")
+    require_patient_access(db, current_user, existing_plan.patient_id)
     """El Nutricionista edita las calorías, macronutrientes, notas o comidas del plan."""
     if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "ADMIN_SAAS"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales pueden editar planes nutricionales.")
@@ -84,6 +90,10 @@ def approve_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    existing_plan = db.get(NutritionalPlan, plan_id)
+    if existing_plan is None:
+        raise HTTPException(status_code=404, detail="Plan no encontrado.")
+    require_patient_access(db, current_user, existing_plan.patient_id)
     """El Nutricionista aprueba el plan, activándolo para el paciente."""
     if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "ADMIN_SAAS"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales pueden aprobar planes.")
@@ -101,6 +111,7 @@ def get_patient_plans(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id, allow_self=True)
     """Consulta la lista de planes (borradores y aprobados) de un paciente."""
     if current_user.role_id in ["CLIENTE", "PACIENTE"] and current_user.id != patient_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")

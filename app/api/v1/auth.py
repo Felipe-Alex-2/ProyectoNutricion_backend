@@ -12,6 +12,7 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    LogoutRequest,
 )
 from app.schemas.user import UserResponse, DeveloperKeyVerifyRequest, DeveloperKeyVerifyResponse
 from app.schemas.common import MessageResponse
@@ -84,14 +85,18 @@ def refresh(request: RefreshTokenRequest, db: Session = Depends(get_db)):
     description="Adds the provided Bearer token to the blacklist so it cannot be used again.",
 )
 def logout(
+    body: Optional[LogoutRequest] = None,
     clear_logs: bool = Query(False),
     client_platform: Optional[str] = Query(None),
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if clear_logs or (client_platform and client_platform.lower() == "mobile"):
-        ActivityLogService.clear_user_logs(db, current_user)
+    if body and body.refresh_token:
+        from app.core.security import decode_token
+        payload = decode_token(body.refresh_token)
+        if payload and payload.get("sub") == current_user.id and payload.get("type") == "refresh":
+            AuthService.blacklist_token(db, body.refresh_token)
     AuthService.blacklist_token(db, credentials.credentials)
     return MessageResponse(message="Successfully logged out")
 

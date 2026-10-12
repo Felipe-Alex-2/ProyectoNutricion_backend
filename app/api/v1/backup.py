@@ -18,13 +18,17 @@ from app.schemas.backup import (
 )
 from app.services.backup_service import BackupService
 from app.core.exceptions import ForbiddenException, NotFoundException, BadRequestException
+from app.core.authorization import require_role, require_tenant
+from starlette.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/backup", tags=["Copias de Seguridad (Backup)"])
 
 
 def ensure_backup_access(user: User):
-    if user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION"]:
         raise ForbiddenException("No tiene permisos para gestionar copias de seguridad.")
+    if user.role_id != "ADMIN_SAAS":
+        require_tenant(user, user.tenant_id)
 
 
 @router.get("/settings", response_model=BackupSettingResponse)
@@ -100,11 +104,6 @@ def get_backup_history(
 ):
     ensure_backup_access(current_user)
     effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
-    # Ejecutar verificación si corresponde copia automática
-    try:
-        BackupService.check_and_run_auto_backup(db, tenant_id=effective_tenant)
-    except Exception:
-        pass
     return BackupService.list_backups(db, tenant_id=effective_tenant)
 
 
@@ -118,7 +117,7 @@ def download_backup_file(
     tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
     if tenant_id:
         log = db.query(BackupLog).filter(BackupLog.filename == filename).first()
-        if log and log.tenant_id and log.tenant_id != tenant_id:
+        if not log or log.tenant_id != tenant_id:
             raise ForbiddenException("No tiene permisos para descargar el respaldo de otra clínica u organización.")
 
     filepath = BackupService.get_backup_filepath(filename)
@@ -138,16 +137,18 @@ async def restore_backup(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
+    require_role(current_user, {"ADMIN_SAAS"})
+    tenant_id = None
     try:
-        content_bytes = await file.read()
+        content_bytes = await file.read(50 * 1024 * 1024 + 1)
+        if len(content_bytes) > 50 * 1024 * 1024:
+            raise ValueError("El respaldo supera el límite de 50 MB.")
         json_data = json.loads(content_bytes.decode("utf-8"))
     except Exception as e:
         raise BadRequestException(f"El archivo subido no es un JSON válido: {str(e)}")
 
     try:
-        res = BackupService.restore_backup_from_json(db, json_data, tenant_id=tenant_id)
+        res = await run_in_threadpool(BackupService.restore_backup_from_json, db, json_data, tenant_id=tenant_id)
 
         scope_str = f"Tenant {tenant_id[:8]}" if tenant_id else "Global"
         db.add(ActivityLog(
@@ -163,7 +164,5 @@ async def restore_backup(
     except ValueError as ve:
         raise BadRequestException(str(ve))
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error durante la restauración: {str(e)}"
-        )
+        db.rollback()
+        raise BadRequestException("No se pudo restaurar el respaldo. Comprueba su formato y clave de cifrado.")

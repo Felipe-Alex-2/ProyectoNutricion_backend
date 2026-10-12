@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.core.authorization import require_role, require_tenant
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from app.services.tenant_service import TenantService
 
@@ -16,6 +17,8 @@ def list_tenants(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if current_user.role_id != "ADMIN_SAAS":
+        return [TenantService.get_by_id(db, current_user.tenant_id)] if current_user.tenant_id else []
     return TenantService.get_all(db, active_only=active_only)
 
 
@@ -33,6 +36,7 @@ def get_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_tenant(current_user, tenant_id)
     return TenantService.get_by_id(db, tenant_id)
 
 
@@ -42,6 +46,7 @@ def create_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, {"ADMIN_SAAS"})
     return TenantService.create(db, data)
 
 
@@ -52,6 +57,7 @@ def update_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, {"ADMIN_SAAS"})
     return TenantService.update(db, tenant_id, data)
 
 
@@ -61,6 +67,7 @@ def toggle_tenant_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, {"ADMIN_SAAS"})
     return TenantService.toggle_status(db, tenant_id)
 
 
@@ -70,5 +77,6 @@ def delete_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, {"ADMIN_SAAS"})
     TenantService.delete(db, tenant_id)
     return None

@@ -1,3 +1,8 @@
+from fastapi import Query
+from fastapi.responses import StreamingResponse
+from app.models.subscription_receipt import SubscriptionReceipt
+from app.schemas.subscription import SubscriptionReceiptOut
+from app.services.subscription_receipt_service import SubscriptionReceiptService
 """
 Subscription management endpoints.
 
@@ -12,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.models.subscription import Subscription
 from app.schemas.subscription import (
     CreateOrderRequest,
     CreateOrderResponse,
@@ -83,7 +89,7 @@ def create_order(
                 status_code=400,
                 detail="Tu cuenta no está asociada a una organización (tenant). Contacta al administrador.",
             )
-        if current_user.role_id not in ("SAAS_ADMIN", "ORG_ADMIN"):
+        if current_user.role_id not in ("ADMIN_SAAS", "ADMIN_ORGANIZATION"):
             raise HTTPException(
                 status_code=403,
                 detail="Solo los administradores pueden gestionar suscripciones corporativas.",
@@ -140,14 +146,7 @@ def validate_sandbox_subscription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Validate and activate Premium directly in Sandbox environment."""
-    target_order_id = (body.order_id if body else None) or order_id
-    sub = SubscriptionService.direct_activate_client_premium(
-        db,
-        user_id=current_user.id,
-        order_id=target_order_id,
-    )
-    return sub
+    raise HTTPException(status_code=410, detail="La activación directa fue retirada. Verifica una orden pagada.")
 
 
 # ------------------------------------------------------------------ #
@@ -164,12 +163,18 @@ def verify_order(
     Returns paid=False with a descriptive message if the buyer has not paid yet.
     Only activates if paid.
     """
-    result = SubscriptionService.verify_and_capture_order(
-        db,
-        order_id=body.order_id,
-        user_id=current_user.id,
-        tenant_id=current_user.tenant_id,
-    )
+    owned = db.query(Subscription).filter_by(paypal_order_id=body.order_id, user_id=current_user.id).first()
+    if not owned:
+        raise HTTPException(status_code=404, detail="Orden no encontrada para tu cuenta.")
+    try:
+        result = SubscriptionService.verify_and_capture_order(
+            db,
+            order_id=body.order_id,
+            user_id=current_user.id,
+            tenant_id=current_user.tenant_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
     sub_out = None
     if result.get("subscription"):
         sub_out = SubscriptionOut.model_validate(result["subscription"])
@@ -215,3 +220,26 @@ def get_history(
         tenant_id=current_user.tenant_id,
         user_id=current_user.id,
     )
+
+
+@router.get("/receipts", response_model=List[SubscriptionReceiptOut])
+def list_receipts(
+    limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+):
+    return db.query(SubscriptionReceipt).filter(SubscriptionReceipt.user_id == current_user.id).order_by(
+        SubscriptionReceipt.paid_at.desc(), SubscriptionReceipt.id.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/receipts/{receipt_id}/pdf")
+def download_receipt(
+    receipt_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user),
+):
+    receipt = db.query(SubscriptionReceipt).filter_by(id=receipt_id, user_id=current_user.id).first()
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado para tu cuenta.")
+    stream = SubscriptionReceiptService.generate_pdf(receipt)
+    return StreamingResponse(stream, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="Recibo_NutriSalud_{receipt.id}.pdf"',
+        "Cache-Control": "private, no-store",
+    })

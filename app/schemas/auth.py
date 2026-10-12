@@ -65,3 +65,7 @@ class ResetPasswordRequest(BaseModel):
         return validate_password_strength(v)
 
 
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: Optional[str] = None

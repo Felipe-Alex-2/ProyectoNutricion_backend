@@ -17,29 +17,6 @@ import logging
 logger = logging.getLogger("api")
 
 
-_db_initialized = False
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Ensure tables and seed data (roles, permissions) are initialized
-    global _db_initialized
-    if not _db_initialized:
-        try:
-            from init_sprint1_db import init_db
-            init_db()
-            _db_initialized = True
-        except Exception as exc:
-            logger.warning(f"Note: Database auto-init skipped or deferred: {exc}")
-            try:
-                Base.metadata.create_all(bind=get_engine())
-            except Exception:
-                pass
-            _db_initialized = True
-    yield
-
-
-
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Full-Stack Authentication REST API with FastAPI, PostgreSQL, JWT & bcrypt.",
@@ -47,14 +24,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    lifespan=lifespan,
 )
 
 # CORS Middleware Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|.*\.vercel\.app|.*\.railway\.app)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,11 +57,12 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    db_status = "ok"
+    from sqlalchemy import text
+    from fastapi.responses import JSONResponse
     try:
-        from sqlalchemy import text
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-    return {"status": "healthy" if db_status == "ok" else "degraded", "database": db_status}
+        return {"status": "healthy", "database": "ok"}
+    except Exception:
+        logger.exception("Database readiness check failed")
+        return JSONResponse(status_code=503, content={"status": "degraded", "database": "unavailable"})

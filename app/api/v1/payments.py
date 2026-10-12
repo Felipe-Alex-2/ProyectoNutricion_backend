@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user, get_current_user_optional
 from app.models.user import User
+from app.models.payment import Payment
+from app.core.authorization import require_role, require_tenant, STAFF_ROLES
+from app.config import settings
 from app.schemas.payment import (
     PaymentCaptureRequest,
     PaymentCreate,
@@ -29,12 +32,14 @@ def create_pos_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, STAFF_ROLES)
+    require_tenant(current_user, body.tenant_id)
     """
     Crea una orden de cobro en caja e inicia el checkout de PayPal Sandbox.
     Retorna la URL de PayPal (approval_url) para realizar el pago.
     """
     # Detect frontend origin if available
-    frontend_url = request.headers.get("origin") or "http://localhost:4200"
+    frontend_url = settings.FRONTEND_URL.rstrip("/")
 
     return PaymentService.create_payment(
         db=db,
@@ -48,8 +53,9 @@ def create_pos_payment(
 def capture_pos_payment(
     body: PaymentCaptureRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
+    _authorize_payment(db, current_user, order_id=body.paypal_order_id)
     """
     Captura y confirma el cobro tras la aprobación del cliente en PayPal Sandbox.
     """
@@ -66,6 +72,9 @@ def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, STAFF_ROLES)
+    if current_user.role_id != "ADMIN_SAAS":
+        require_tenant(current_user, current_user.tenant_id)
     """
     Lista el historial de cobros realizados en la sucursal seleccionada o general.
     """
@@ -87,6 +96,9 @@ def get_payment_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, STAFF_ROLES)
+    if current_user.role_id != "ADMIN_SAAS":
+        require_tenant(current_user, current_user.tenant_id)
     """
     Retorna métricas de caja (total recaudado, cobros completados y pendientes).
     """
@@ -106,6 +118,7 @@ def cancel_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _authorize_payment(db, current_user, payment_id=payment_id)
     """
     Cancela un cobro pendiente en caja.
     """
@@ -119,8 +132,9 @@ def cancel_payment(
 def export_payment_pdf(
     payment_id: str,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
+    _authorize_payment(db, current_user, payment_id=payment_id)
     """
     Genera y descarga el archivo PDF oficial con el Detalle de Pago (comprobante / recibo).
     """
@@ -130,3 +144,13 @@ def export_payment_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _authorize_payment(db, actor, payment_id=None, order_id=None):
+    require_role(actor, STAFF_ROLES)
+    query = db.query(Payment)
+    payment = query.filter(Payment.id == payment_id).first() if payment_id else query.filter(Payment.paypal_order_id == order_id).first()
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Cobro no encontrado.")
+    require_tenant(actor, payment.tenant_id)
+    return payment

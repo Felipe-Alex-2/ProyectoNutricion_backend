@@ -38,9 +38,16 @@ def test_setup(db_session):
         role_id="CLIENTE",
         is_active=True,
     )
+    from app.models.tenant import Tenant
+    from app.models.patient_link import PatientNutritionistLink
+    db_session.add(Tenant(id="clinical-tenant", name="Clinical Tenant", code="CLINICAL"))
+    db_session.commit()
+    nutri.tenant_id = patient.tenant_id = "clinical-tenant"
     db_session.add_all([admin, nutri, patient])
     db_session.commit()
 
+    db_session.add(PatientNutritionistLink(patient_id=patient.id, nutritionist_id=nutri.id, tenant_id="clinical-tenant", pairing_code="CLINICAL-LINK", status="LINKED"))
+    db_session.commit()
     return {
         "admin_token": create_access_token(data={"sub": admin.id, "email": admin.email}),
         "nutri_token": create_access_token(data={"sub": nutri.id, "email": nutri.email}),

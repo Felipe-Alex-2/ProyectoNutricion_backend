@@ -6,6 +6,7 @@ from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.tenant import Tenant
+from app.core.authorization import require_user_management, require_role, VALID_ROLES
 from app.schemas.user import UserResponse, OrganizationUserCreate, UserUpdate
 from app.core.security import get_password_hash
 from app.core.exceptions import (
@@ -45,6 +46,8 @@ def list_organization_users(
         else:
             query = query.filter(User.id == current_user.id)
 
+    if current_user.role_id not in {"ADMIN_SAAS", "ADMIN_ORGANIZATION"}:
+        query = query.filter(User.id == current_user.id)
     if role_id:
         query = query.filter(User.role_id == role_id)
 
@@ -61,6 +64,7 @@ def create_organization_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_user_management(current_user)
     # Aislamiento multi-tenant:
     # Si es Admin de Organización, solo puede registrar usuarios en su propia clínica
     target_tenant_id = data.tenant_id
@@ -71,6 +75,8 @@ def create_organization_user(
         if data.role_id == "ADMIN_SAAS":
             raise ForbiddenException("No tienes autorización para asignar el rol de Administrador SaaS Global.")
 
+    if data.role_id not in VALID_ROLES:
+        raise BadRequestException("Rol inválido.")
     # Check email unique
     clean_email = data.email.strip().lower()
     existing = db.query(User).filter(User.email == clean_email).first()
@@ -115,10 +121,14 @@ def update_organization_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_user_management(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("Usuario no encontrado")
 
+    require_user_management(current_user, user)
+    if data.role_id is not None and data.role_id not in VALID_ROLES:
+        raise BadRequestException("Rol inválido.")
     # Aislamiento multi-tenant:
     # Si es Admin de Organización, no puede modificar usuarios de otra clínica
     if current_user.role_id == "ADMIN_ORGANIZATION":
@@ -156,6 +166,7 @@ def update_organization_user(
                 "Solo el Administrador SaaS (Admin Global) tiene permisos para modificar contraseñas de usuarios."
             )
         user.hashed_password = get_password_hash(data.password)
+        user.session_version = (user.session_version or 0) + 1
 
     db.commit()
     db.refresh(user)
@@ -168,6 +179,7 @@ def toggle_user_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_user_management(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("Usuario no encontrado")
@@ -175,6 +187,7 @@ def toggle_user_status(
     if current_user.role_id == "ADMIN_ORGANIZATION" and user.tenant_id != current_user.tenant_id:
         raise ForbiddenException("No tienes permiso para modificar usuarios de otra organización.")
 
+    require_user_management(current_user, user)
     if user.id == current_user.id:
         raise BadRequestException("No puedes desactivar tu propia cuenta en sesión activa.")
 
@@ -190,6 +203,7 @@ def delete_organization_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_user_management(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("Usuario no encontrado")
@@ -198,6 +212,7 @@ def delete_organization_user(
     if current_user.role_id == "ADMIN_ORGANIZATION" and user.tenant_id != current_user.tenant_id:
         raise ForbiddenException("No tienes permiso para eliminar usuarios de otra organización.")
 
+    require_user_management(current_user, user)
     if user.id == current_user.id:
         raise BadRequestException("No puedes eliminar tu propia cuenta mientras estás conectado.")
 

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Integer
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -18,6 +18,7 @@ class User(Base):
     role_id = Column(String(50), ForeignKey("roles.id", ondelete="RESTRICT"), default="CLIENTE", nullable=False)
     tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     developer_key_hash = Column(String(255), nullable=True)

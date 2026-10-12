@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.activity_log import ActivityLog
-from app.schemas.user import UserResponse, UserUpdate
+from app.schemas.user import UserResponse, UserUpdate, ProfileUpdate
+from app.core.authorization import require_patient_access, require_tenant
 from app.schemas.common import MessageResponse
 from app.services.user_service import UserService
 from app.api.deps import get_current_user
@@ -32,7 +33,7 @@ def get_me(current_user: User = Depends(get_current_user)):
     description="Updates the profile details (name, email, password or developer key) of the authenticated user.",
 )
 def update_me(
-    request: UserUpdate,
+    request: ProfileUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -74,6 +75,8 @@ def update_me(
     summary="Listar clientes/pacientes",
 )
 def list_patients(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None, description="Búsqueda por nombre, correo o teléfono"),
     is_active: Optional[bool] = Query(None, description="Filtrar por estado activo"),
     tenant_id: Optional[str] = Query(None, description="Filtrar por organización / tenant (ADMIN_SAAS)"),
@@ -84,12 +87,16 @@ def list_patients(
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para consultar la lista de clientes.")
 
+    if current_user.role_id != "ADMIN_SAAS":
+        require_tenant(current_user, current_user.tenant_id)
     tenant_filter = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
     patients = UserService.list_patients(
         db,
         tenant_id=tenant_filter,
         search=search,
         is_active=is_active,
+        nutritionist_id=current_user.id if current_user.role_id == "NUTRICIONISTA" else None,
+        limit=limit, offset=offset,
     )
     return patients
 
@@ -102,10 +109,13 @@ def list_patients(
 )
 def update_patient(
     patient_id: str,
-    data: UserUpdate,
+    data: ProfileUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id)
+    if (data.password or data.developer_key) and current_user.role_id != "ADMIN_SAAS":
+        raise ForbiddenException("Solo administración global puede restablecer credenciales.")
     """Permite al especialista o administrador actualizar datos de contacto de un cliente."""
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para modificar datos de clientes.")
@@ -152,6 +162,7 @@ def delete_patient(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id)
     """Desactiva un cliente y anula sus vinculaciones activas."""
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para desactivar clientes.")

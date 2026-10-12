@@ -2,6 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
+preDeployCommand = ["python prepare_db.py"]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
 startCommand = "python run.py"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.core.authorization import require_role
 from app.schemas.rbac import RoleResponse, PermissionResponse, UpdateRolePermissionsRequest
 from app.services.rbac_service import RBACService
 
@@ -33,4 +34,5 @@ def update_role_permissions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    require_role(current_user, {"ADMIN_SAAS"})
     return RBACService.update_role_permissions(db, role_id, data.permission_ids)

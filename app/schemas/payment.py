@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class PaymentCreate(BaseModel):
@@ -37,8 +37,7 @@ class PaymentOut(BaseModel):
     created_at: datetime
     paid_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaymentOrderCreatedOut(BaseModel):

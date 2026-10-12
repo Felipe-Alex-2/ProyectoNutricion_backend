@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # =====================================================================
@@ -78,8 +78,7 @@ class NutritionalPlanResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WeeklyMenuGenerateRequest(BaseModel):
@@ -117,8 +116,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatHistoryResponse(BaseModel):
@@ -182,8 +180,7 @@ class FoodRecordResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =====================================================================
@@ -197,8 +194,7 @@ class ConditionCatalogItem(BaseModel):
     name: str
     description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HabitEvaluationItem(BaseModel):
@@ -230,8 +226,7 @@ class AutomationConfigResponse(BaseModel):
     last_run_at: Optional[datetime] = None
     description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AutomationConfigUpdate(BaseModel):

@@ -1,3 +1,4 @@
+from app.core.authorization import require_patient_access, require_tenant
 """Endpoints de recetas nutricionales y planes de alimentación."""
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -88,6 +89,10 @@ def create_recipe(
         )
 
     tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else (data.tenant_id or current_user.tenant_id)
+
+    require_tenant(current_user, tenant_id)
+    for patient_id in data.assigned_patient_ids or []:
+        require_patient_access(db, current_user, patient_id)
 
     # Validar que no se repita el nombre de la receta dentro del mismo tenant
     clean_title = data.title.strip()
@@ -189,6 +194,10 @@ def update_recipe(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes modificar recetas pertenecientes a otra clínica u organización.")
         if current_user.role_id == "NUTRICIONISTA" and recipe.created_by != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo puedes modificar tus recetas.")
+
+    require_tenant(current_user, recipe.tenant_id)
+    for patient_id in data.assigned_patient_ids or []:
+        require_patient_access(db, current_user, patient_id)
 
     # Validar que no se repita el nombre de la receta con otra receta existente del mismo tenant
     if data.title:

@@ -8,7 +8,8 @@ import io
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, case
 from fastapi import HTTPException, status
 
 from app.models.payment import Payment
@@ -185,6 +186,9 @@ class PaymentService:
                 detail=f"Error capturando orden en PayPal: {str(exc)}",
             )
 
+        if capture_res.get("status") != "COMPLETED" or not capture_res.get("capture_id"):
+            raise HTTPException(status_code=502, detail="PayPal no confirmó el cobro.")
+        PayPalService.validate_completed_payment(capture_res.get("raw", {}), payment.amount, payment.currency)
         payment.status = "COMPLETED"
         payment.paypal_capture_id = capture_res.get("capture_id")
         payment.paid_at = datetime.now(timezone.utc)
@@ -201,7 +205,7 @@ class PaymentService:
         status_filter: Optional[str] = None,
     ) -> List[PaymentOut]:
         """List payments filtered by tenant branch and optional status or payment method."""
-        query = db.query(Payment)
+        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier))
         if tenant_id:
             query = query.filter(Payment.tenant_id == tenant_id)
         if status_filter:
@@ -213,27 +217,23 @@ class PaymentService:
             else:
                 query = query.filter(Payment.status == status_filter)
 
-        payments = query.order_by(Payment.created_at.desc()).all()
+        payments = query.order_by(Payment.created_at.desc()).limit(200).all()
         return [PaymentService._map_to_out(p) for p in payments]
 
     @staticmethod
     def get_payment_stats(db: Session, tenant_id: Optional[str] = None) -> PaymentStatsOut:
         """Calculate summary statistics for a given branch or all branches."""
-        query = db.query(Payment)
+        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier))
         if tenant_id:
             query = query.filter(Payment.tenant_id == tenant_id)
 
-        all_payments = query.all()
-        total_collected = sum(p.amount for p in all_payments if p.status == "COMPLETED")
-        completed_count = sum(1 for p in all_payments if p.status == "COMPLETED")
-        pending_count = sum(1 for p in all_payments if p.status == "PENDING")
-
-        return PaymentStatsOut(
-            total_collected=round(total_collected, 2),
-            total_count=len(all_payments),
-            completed_count=completed_count,
-            pending_count=pending_count,
-        )
+        totals = query.with_entities(
+            func.coalesce(func.sum(case((Payment.status == "COMPLETED", Payment.amount), else_=0)), 0),
+            func.count(Payment.id),
+            func.coalesce(func.sum(case((Payment.status == "COMPLETED", 1), else_=0)), 0),
+            func.coalesce(func.sum(case((Payment.status == "PENDING", 1), else_=0)), 0),
+        ).one()
+        return PaymentStatsOut(total_collected=round(float(totals[0]), 2), total_count=totals[1], completed_count=totals[2], pending_count=totals[3])
 
     @staticmethod
     def cancel_payment(db: Session, payment_id: str) -> PaymentOut:

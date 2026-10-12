@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.subscription import Subscription
 from app.schemas.subscription import PlanFeature, SubscriptionPlanOut
 from app.services.paypal_service import PayPalService
+from app.services.subscription_receipt_service import SubscriptionReceiptService
 from app.config import settings
 
 logger = logging.getLogger("subscriptions")
@@ -169,7 +170,7 @@ class SubscriptionService:
 
         # Persist pending subscription
         subscription = Subscription(
-            tenant_id=tenant_id,
+            tenant_id=None if plan_name_upper == "CLIENTE_PREMIUM" else tenant_id,
             user_id=user_id,
             plan_name=plan_name_upper,
             paypal_order_id=paypal_result["order_id"],
@@ -210,27 +211,32 @@ class SubscriptionService:
             Subscription.paypal_order_id == order_id,
             Subscription.status == "PENDING",
         )
-        if tenant_id:
-            query = query.filter(Subscription.tenant_id == tenant_id)
-        elif user_id:
+        if user_id:
             query = query.filter(Subscription.user_id == user_id)
+        elif tenant_id:
+            query = query.filter(Subscription.tenant_id == tenant_id)
+        else:
+            raise ValueError("Debes identificar al comprador.")
 
-        subscription = query.first()
+        subscription = query.with_for_update().first()
         if not subscription:
             raise ValueError("No se encontró una suscripción pendiente para esta orden.")
 
         # Capture with PayPal
         capture_result = PayPalService.capture_order(order_id)
-        if capture_result.get("status") not in ("COMPLETED", "APPROVED"):
+        if capture_result.get("status") != "COMPLETED":
             subscription.status = "FAILED"  # type: ignore[assignment]
             db.commit()
             raise Exception(
                 f"El pago no fue completado. Estado PayPal: {capture_result.get('status')}"
             )
 
+        PayPalService.validate_completed_payment(capture_result.get("raw", {}), subscription.amount, subscription.currency)
         # Cancel any previously active subscription for this tenant or user
         cancel_query = db.query(Subscription).filter(Subscription.status == "ACTIVE")
-        if subscription.tenant_id:
+        if subscription.plan_name == "CLIENTE_PREMIUM":
+            cancel_query = cancel_query.filter(Subscription.user_id == subscription.user_id, Subscription.plan_name == "CLIENTE_PREMIUM")
+        elif subscription.tenant_id:
             cancel_query = cancel_query.filter(Subscription.tenant_id == subscription.tenant_id)
         elif subscription.user_id:
             cancel_query = cancel_query.filter(Subscription.user_id == subscription.user_id)
@@ -242,6 +248,7 @@ class SubscriptionService:
         subscription.status = "ACTIVE"  # type: ignore[assignment]
         subscription.started_at = now  # type: ignore[assignment]
         subscription.expires_at = now + timedelta(days=30)  # type: ignore[assignment]
+        SubscriptionReceiptService.issue(db, subscription)
         db.commit()
         db.refresh(subscription)
 
@@ -267,6 +274,13 @@ class SubscriptionService:
         If APPROVED, captures the payment and activates the subscription.
         If COMPLETED, activates the subscription.
         """
+        subscription = db.query(Subscription).filter(Subscription.paypal_order_id == order_id, Subscription.user_id == user_id).with_for_update().first()
+        if not subscription:
+            raise ValueError("La orden no pertenece a tu cuenta.")
+        if subscription.status == "ACTIVE":
+            return {"paid": True, "status": "COMPLETED", "message": "Pago ya verificado.", "subscription": subscription}
+        if subscription.status != "PENDING":
+            raise ValueError("La orden ya no está pendiente.")
         try:
             order_data = PayPalService.get_order(order_id)
             paypal_status = order_data.get("status", "UNKNOWN")
@@ -291,7 +305,7 @@ class SubscriptionService:
         if paypal_status == "APPROVED":
             try:
                 capture_res = PayPalService.capture_order(order_id)
-                if capture_res.get("status") not in ("COMPLETED", "APPROVED"):
+                if capture_res.get("status") != "COMPLETED":
                     return {
                         "paid": False,
                         "status": capture_res.get("status", "FAILED"),
@@ -316,67 +330,26 @@ class SubscriptionService:
                 "message": f"Estado de orden en PayPal: {paypal_status}. Aún no se ha completado el pago.",
             }
 
-        # Activate subscription
-        sub = SubscriptionService.direct_activate_client_premium(
-            db,
-            user_id=user_id,
-            order_id=order_id,
-        )
-        if capture_id:
-            sub.paypal_capture_id = capture_id
-            db.commit()
-
-        return {
-            "paid": True,
-            "status": "COMPLETED",
-            "message": "Pago verificado exitosamente. Plan Premium activado.",
-            "subscription": sub,
-        }
-
-    # ------------------------------------------------------------------ #
-    #  Direct / Sandbox activation for testing
-    # ------------------------------------------------------------------ #
-    @staticmethod
-    def direct_activate_client_premium(db: Session, user_id: str, order_id: Optional[str] = None) -> Subscription:
-        """Directly activates or validates a 30-day Premium subscription for a client."""
-        # Check if there is an existing pending subscription for this user
-        subscription = None
-        if order_id:
-            subscription = db.query(Subscription).filter(
-                Subscription.paypal_order_id == order_id,
-                Subscription.user_id == user_id,
-            ).first()
-
-        now = datetime.now(timezone.utc)
-        # Cancel any existing active
-        db.query(Subscription).filter(
-            Subscription.user_id == user_id,
-            Subscription.status == "ACTIVE",
-        ).update({"status": "REPLACED"})
-
-        if subscription:
-            subscription.status = "ACTIVE"
-            subscription.started_at = now
-            subscription.expires_at = now + timedelta(days=30)
-            subscription.amount = 5.0
-            subscription.currency = "USD"
+        # Only activate the persisted order belonging to this buyer.
+        if paypal_status == "APPROVED":
+            provider_order = capture_res.get("raw", {})
         else:
-            subscription = Subscription(
-                user_id=user_id,
-                plan_name="CLIENTE_PREMIUM",
-                paypal_order_id=order_id or "DIRECT_SANDBOX",
-                paypal_capture_id="SANDBOX_VERIFIED",
-                status="ACTIVE",
-                amount=5.0,
-                currency="USD",
-                started_at=now,
-                expires_at=now + timedelta(days=30),
-            )
-            db.add(subscription)
-
+            provider_order = order_data
+        capture = PayPalService.validate_completed_payment(provider_order, subscription.amount, subscription.currency)
+        if subscription.plan_name == "CLIENTE_PREMIUM":
+            old = db.query(Subscription).filter(Subscription.user_id == user_id, Subscription.plan_name == "CLIENTE_PREMIUM", Subscription.status == "ACTIVE")
+        else:
+            old = db.query(Subscription).filter(Subscription.tenant_id == subscription.tenant_id, Subscription.plan_name != "CLIENTE_PREMIUM", Subscription.status == "ACTIVE")
+        old.update({"status": "REPLACED"})
+        now = datetime.now(timezone.utc)
+        subscription.status = "ACTIVE"
+        subscription.paypal_capture_id = capture["id"]
+        subscription.started_at = now
+        subscription.expires_at = now + timedelta(days=30)
+        SubscriptionReceiptService.issue(db, subscription)
         db.commit()
         db.refresh(subscription)
-        return subscription
+        return {"paid": True, "status": "COMPLETED", "message": "Pago verificado exitosamente.", "subscription": subscription}
 
     # ------------------------------------------------------------------ #
     #  Query helpers

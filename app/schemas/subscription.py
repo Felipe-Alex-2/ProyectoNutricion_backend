@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 
 class PlanFeature(BaseModel):
@@ -45,8 +45,7 @@ class SubscriptionOut(BaseModel):
     created_at: datetime
     paypal_order_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SubscriptionHistoryOut(BaseModel):
@@ -62,8 +61,7 @@ class SubscriptionHistoryOut(BaseModel):
     created_at: datetime
     paypal_order_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VerifyOrderResponse(BaseModel):
@@ -71,3 +69,27 @@ class VerifyOrderResponse(BaseModel):
     status: str
     message: str
     subscription: Optional[SubscriptionOut] = None
+
+
+class SubscriptionReceiptOut(BaseModel):
+    id: str
+    buyer_name: str
+    buyer_email: str
+    plan_name: str
+    amount: float
+    currency: str
+    paypal_order_id: str
+    paypal_capture_id: str
+    is_sandbox: bool
+    paid_at: datetime
+    expires_at: Optional[datetime] = None
+    issued_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+    @field_serializer("paid_at", "expires_at", "issued_at")
+    def serialize_utc_date(self, value):
+        if value is None:
+            return None
+        return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()

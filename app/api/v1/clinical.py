@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.core.authorization import require_patient_access
 from app.models.clinical import PatientAnamnesis, ClinicalRecord
 from app.models.activity_log import ActivityLog
 from app.schemas.clinical import (
@@ -77,6 +78,7 @@ def get_patient_anamnesis_by_staff(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id)
     """Nutricionistas y Administradores consultan la anamnesis del paciente en la Web."""
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso no autorizado.")
@@ -115,6 +117,7 @@ def get_patient_clinical_records(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id, allow_self=True)
     """Consultar las notas diagnósticas y evolución clínica del paciente (Web)."""
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         if current_user.id != patient_id:
@@ -136,6 +139,7 @@ def create_clinical_record(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id)
     """El Nutricionista o Administrador registra diagnóstico o nota de evolución clínica (Web)."""
     if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales de salud pueden asentar notas clínicas.")
@@ -178,6 +182,7 @@ def get_ai_recipe_recommendations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_patient_access(db, current_user, patient_id)
     """
     Asistente Inteligente IA para apoyo al nutricionista: analiza anamnesis,
     historial, alergias y metas del paciente para recomendar recetas con justificación médica.

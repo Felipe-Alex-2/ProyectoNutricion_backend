@@ -1,7 +1,13 @@
 import hashlib
 import json
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
+import base64
+from uuid import uuid4
+from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import select, and_, DateTime, Date
+from app.config import settings as app_settings
+from app.database import Base
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
@@ -19,7 +25,7 @@ from app.models.notification import Notification
 from app.models.backup import BackupSetting, BackupLog
 from app.schemas.backup import BackupSettingUpdate, BackupRestoreResponse
 
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backups")
+BACKUP_DIR = app_settings.BACKUP_DIR
 
 
 class BackupService:
@@ -78,7 +84,7 @@ class BackupService:
 
         timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         prefix = f"backup_tenant_{tenant_id[:8]}" if tenant_id else "backup_nutrisalud_global"
-        filename = f"{prefix}_{backup_type.lower()}_{timestamp_str}.json"
+        filename = f"{prefix}_{backup_type.lower()}_{timestamp_str}_{uuid4().hex[:8]}.json"
         filepath = os.path.join(BACKUP_DIR, filename)
 
         snapshot_data = {
@@ -130,8 +136,8 @@ class BackupService:
 
             # Links
             links = db.query(PatientNutritionistLink).filter(PatientNutritionistLink.patient_id.in_(tenant_user_ids)).all()
-            snapshot_data["tables"]["patient_links"] = [model_to_dict(l) for l in links]
-            table_counts["patient_links"] = len(links)
+            snapshot_data["tables"]["patient_nutritionist_links"] = [model_to_dict(l) for l in links]
+            table_counts["patient_nutritionist_links"] = len(links)
 
             # Recetas del tenant
             recipes = db.query(Recipe).filter(Recipe.tenant_id == tenant_id).all()
@@ -197,7 +203,7 @@ class BackupService:
                 ("permissions", Permission),
                 ("role_permissions", RolePermission),
                 ("users", User),
-                ("patient_links", PatientNutritionistLink),
+                ("patient_nutritionist_links", PatientNutritionistLink),
                 ("recipes", Recipe),
                 ("recipe_assignments", RecipeAssignment),
                 ("patient_anamnesis", PatientAnamnesis),
@@ -213,16 +219,39 @@ class BackupService:
                 snapshot_data["tables"][table_key] = [model_to_dict(r) for r in records]
                 table_counts[table_key] = len(records)
 
+        # Cover new modules automatically; tenant snapshots never include global catalogs.
+        for table in Base.metadata.sorted_tables:
+            if table.name in snapshot_data["tables"] or table.name in {"backup_logs", "backup_settings", "token_blacklist"}:
+                continue
+            query = select(table)
+            if tenant_id:
+                if "tenant_id" in table.c:
+                    query = query.where(table.c.tenant_id == tenant_id)
+                elif "patient_id" in table.c:
+                    query = query.where(table.c.patient_id.in_(tenant_user_ids))
+                elif "user_id" in table.c:
+                    query = query.where(table.c.user_id.in_(tenant_user_ids))
+                else:
+                    continue
+            rows = db.execute(query).mappings().all()
+            snapshot_data["tables"][table.name] = [dict(row) for row in rows]
+            table_counts[table.name] = len(rows)
+        if tenant_id:
+            for user in snapshot_data["tables"].get("users", []):
+                user.pop("hashed_password", None)
+                user.pop("developer_key_hash", None)
         snapshot_data["record_counts"] = table_counts
         snapshot_data["total_records"] = sum(table_counts.values())
 
         # Serializar y calcular checksum
-        json_bytes = json.dumps(snapshot_data, indent=2, ensure_ascii=False).encode("utf-8")
+        json_bytes = json.dumps(snapshot_data, indent=2, ensure_ascii=False, default=lambda value: value.isoformat() if isinstance(value, (date, datetime)) else str(value)).encode("utf-8")
         checksum = hashlib.sha256(json_bytes).hexdigest()
         snapshot_data["checksum_sha256"] = checksum
 
         with open(filepath, "wb") as f:
-            f.write(json.dumps(snapshot_data, indent=2, ensure_ascii=False).encode("utf-8"))
+            payload = json.dumps(snapshot_data, ensure_ascii=False, default=lambda value: value.isoformat() if isinstance(value, (date, datetime)) else str(value)).encode("utf-8")
+            envelope = {"format": "nutrisalud-encrypted-v1", "ciphertext": cls._cipher().encrypt(payload).decode("ascii")}
+            f.write(json.dumps(envelope).encode("utf-8"))
 
         file_size = os.path.getsize(filepath)
 
@@ -293,108 +322,62 @@ class BackupService:
         # Ejecutar backup automático para este tenant
         return cls.create_backup(db, backup_type="AUTOMATICO", user_name="Cron Automático", tenant_id=tenant_id)
 
+    @staticmethod
+    def _cipher():
+        # Dedicated backup keys survive JWT key rotations. Development fallback only.
+        secret = app_settings.BACKUP_ENCRYPTION_KEY or app_settings.SECRET_KEY
+        key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest())
+        return Fernet(key)
+
     @classmethod
-    def restore_backup_from_json(
-        cls,
-        db: Session,
-        backup_content: Dict[str, Any],
-        tenant_id: Optional[str] = None,
-    ) -> BackupRestoreResponse:
-        """
-        Restaura datos desde un snapshot JSON verificado.
-        Si se especifica tenant_id, restringe la restauración exclusivamente a los datos del tenant.
-        """
-        tables = backup_content.get("tables", {})
-        if not tables:
-            raise ValueError("El archivo no contiene una estructura válida de respaldo ('tables').")
-
-        backup_tenant_id = backup_content.get("tenant_id")
+    def restore_backup_from_json(cls, db, backup_content, tenant_id=None):
         if tenant_id:
-            if backup_tenant_id and backup_tenant_id != tenant_id:
-                raise ValueError("El archivo de respaldo pertenece a otra clínica u organización y no puede ser restaurado en este entorno.")
-
-        # Parsear fechas
-        def parse_date(val):
-            if val and isinstance(val, str):
-                try:
-                    return datetime.fromisoformat(val)
-                except Exception:
-                    pass
-            return val
-
-        restored_records = 0
-        restored_tables = 0
-
-        # Para cada tabla soportada, sincronizar o insertar registros
-        models_order = [
-            ("tenants", Tenant),
-            ("roles", Role),
-            ("permissions", Permission),
-            ("role_permissions", RolePermission),
-            ("users", User),
-            ("patient_links", PatientNutritionistLink),
-            ("recipes", Recipe),
-            ("recipe_assignments", RecipeAssignment),
-            ("patient_anamnesis", PatientAnamnesis),
-            ("clinical_records", ClinicalRecord),
-            ("subscriptions", Subscription),
-            ("payments", Payment),
-            ("appointments", Appointment),
-            ("notifications", Notification),
-            ("activity_logs", ActivityLog),
-        ]
-
-        # Tablas restringidas a nivel global si se restaura por tenant
-        global_only_tables = {"tenants", "roles", "permissions", "role_permissions"}
-
-        for table_name, model_cls in models_order:
-            if tenant_id and table_name in global_only_tables:
-                continue
-
-            rows = tables.get(table_name, [])
-            if not rows:
-                continue
-
-            restored_tables += 1
-            for row in rows:
-                # Convertir fechas
-                cleaned_row = {}
-                for k, v in row.items():
-                    if k in ["created_at", "updated_at", "assigned_at", "linked_at", "scheduled_at", "last_backup_at"]:
-                        cleaned_row[k] = parse_date(v)
-                    else:
-                        cleaned_row[k] = v
-
-                # Si es tenant específico, asegurar aislamiento
-                if tenant_id:
-                    if hasattr(model_cls, "tenant_id"):
-                        cleaned_row["tenant_id"] = tenant_id
-
-                # Verificar si ya existe por ID (o clave primaria)
-                pk_val = cleaned_row.get("id")
-                if pk_val:
-                    existing = db.query(model_cls).filter(getattr(model_cls, "id") == pk_val).first()
-                    if existing:
-                        # Si es tenant, no sobreescribir si pertenece a otro tenant
-                        if tenant_id and hasattr(existing, "tenant_id") and existing.tenant_id and existing.tenant_id != tenant_id:
+            raise ValueError("La restauración requiere administración global.")
+        if not isinstance(backup_content, dict) or backup_content.get("format") != "nutrisalud-encrypted-v1":
+            raise ValueError("Se requiere un respaldo cifrado generado por esta versión.")
+        try:
+            snapshot = json.loads(cls._cipher().decrypt(backup_content["ciphertext"].encode("ascii")))
+        except (InvalidToken, KeyError, ValueError, TypeError):
+            raise ValueError("Clave incorrecta o respaldo alterado.")
+        if snapshot.get("tenant_id"):
+            raise ValueError("Un respaldo de clínica es una exportación, no un respaldo completo de recuperación.")
+        tables = snapshot.get("tables")
+        if not isinstance(tables, dict) or not tables:
+            raise ValueError("El respaldo no contiene tablas válidas.")
+        restored = table_count = 0
+        try:
+            for table in Base.metadata.sorted_tables:
+                rows = tables.get(table.name, [])
+                if not isinstance(rows, list):
+                    raise ValueError("Estructura de tabla inválida.")
+                if not rows:
+                    continue
+                table_count += 1
+                for row in rows:
+                    values = {}
+                    for column in table.columns:
+                        if column.name not in row:
                             continue
-                        for field, val in cleaned_row.items():
-                            if field != "id":
-                                setattr(existing, field, val)
+                        value = row[column.name]
+                        if value is not None and isinstance(column.type, DateTime):
+                            value = datetime.fromisoformat(value)
+                        elif value is not None and isinstance(column.type, Date):
+                            value = date.fromisoformat(value)
+                        values[column.name] = value
+                    keys = list(table.primary_key.columns)
+                    if any(key.name not in values for key in keys):
+                        raise ValueError("El respaldo contiene una fila sin clave primaria.")
+                    predicate = and_(*(key == values[key.name] for key in keys))
+                    exists = db.execute(select(*keys).where(predicate)).first()
+                    if exists:
+                        db.execute(table.update().where(predicate).values(**values))
                     else:
-                        obj = model_cls(**cleaned_row)
-                        db.add(obj)
-                else:
-                    obj = model_cls(**cleaned_row)
-                    db.add(obj)
-
-                restored_records += 1
-
-        db.commit()
-
-        return BackupRestoreResponse(
-            success=True,
-            message=f"Restauración completada con éxito. Se procesaron {restored_tables} tablas y {restored_records} registros.",
-            tables_restored=restored_tables,
-            records_restored=restored_records,
-        )
+                        db.execute(table.insert().values(**values))
+                    restored += 1
+            # A restore never resurrects sessions that were active in the snapshot.
+            db.query(User).update({User.session_version: User.session_version + 1})
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return BackupRestoreResponse(success=True, message="Respaldo cifrado restaurado.", records_restored=restored, tables_restored=table_count)

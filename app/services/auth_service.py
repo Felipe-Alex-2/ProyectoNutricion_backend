@@ -40,9 +40,8 @@ class AuthService:
         if existing:
             raise ConflictException(detail="Email is already registered")
 
-        # Rol según plataforma de registro: Web -> ADMIN_SAAS, Móvil -> CLIENTE
-        platform = getattr(request, "client_platform", "web")
-        assigned_role = "CLIENTE" if (platform and platform.lower() == "mobile") else "ADMIN_SAAS"
+        # El registro público nunca concede privilegios administrativos.
+        assigned_role = "CLIENTE"
 
         # Validar sucursal (tenant_id) si fue proporcionada
         if request.tenant_id:
@@ -76,8 +75,8 @@ class AuthService:
     @classmethod
     def create_tokens_for_user(cls, user: User) -> TokenResponse:
         """Generate access and refresh tokens for user."""
-        access_token = create_access_token(subject=user.id)
-        refresh_token = create_refresh_token(subject=user.id)
+        access_token = create_access_token(subject=user.id, data={"sv": user.session_version or 0})
+        refresh_token = create_refresh_token(subject=user.id, session_version=user.session_version or 0)
 
         return TokenResponse(
             access_token=access_token,
@@ -102,11 +101,15 @@ class AuthService:
         if not user_id:
             raise AuthException(detail="Invalid token payload")
 
-        user = UserService.get_by_id(db, user_id)
+        user = db.query(User).filter(User.id == user_id).with_for_update().first()
+        if cls.is_token_blacklisted(db, request.refresh_token):
+            raise AuthException(detail="Refresh token has been revoked")
         if not user or not user.is_active:
             raise AuthException(detail="User not found or inactive")
 
-        # Create new tokens
+        if payload.get("sv", 0) != (user.session_version or 0):
+            raise AuthException(detail="Session has been revoked")
+        cls.blacklist_token(db, request.refresh_token)
         return cls.create_tokens_for_user(user)
 
     @staticmethod
@@ -172,6 +175,7 @@ class AuthService:
 
         # 4. Hash and save new password
         user.hashed_password = get_password_hash(request.new_password)
+        user.session_version = (user.session_version or 0) + 1
         db.add(user)
         db.commit()
 

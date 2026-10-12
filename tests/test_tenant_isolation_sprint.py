@@ -144,7 +144,11 @@ def test_recipe_tenant_isolation(multi_tenant_setup, client):
     assert "Ensalada Quinoa Alpha" not in titles_b
 
 
-def test_backup_tenant_isolation(multi_tenant_setup, client):
+def test_backup_tenant_isolation(multi_tenant_setup, client, db_session):
+    # Bulk backup belongs to clinic administration, not the nutritionist role.
+    multi_tenant_setup["nutri_a"].role_id = "ADMIN_ORGANIZATION"
+    multi_tenant_setup["nutri_b"].role_id = "ADMIN_ORGANIZATION"
+    db_session.commit()
     token_a = multi_tenant_setup["token_a"]
     token_b = multi_tenant_setup["token_b"]
 

@@ -126,3 +126,11 @@ class UserResponse(UserBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+
+class ProfileUpdate(UserUpdate):
+    """Personal profile fields; administrative fields are explicitly rejected."""
+    @field_validator("role_id", "tenant_id", "is_active", mode="before")
+    @classmethod
+    def reject_administrative_fields(cls, value):
+        raise ValueError("Los campos administrativos no se pueden modificar desde el perfil.")

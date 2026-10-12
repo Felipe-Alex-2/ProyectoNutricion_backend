@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -18,13 +18,14 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 @router.post("", response_model=AppointmentOut)
 def schedule_appointment(
     body: AppointmentCreate,
+    idempotency_key: Optional[str] = Header(None, min_length=1, max_length=128),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Agenda una nueva cita médica/nutricional. Queda en estado PENDING y notifica al especialista.
     """
-    return AppointmentService.create_appointment(db=db, current_user=current_user, data=body)
+    return AppointmentService.create_appointment(db=db, current_user=current_user, data=body, idempotency_key=idempotency_key)
 
 
 @router.get("", response_model=List[AppointmentOut])

@@ -1,5 +1,6 @@
 """Endpoints de Visión por Computadora para análisis de platos de comida."""
 from typing import List
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -24,10 +25,10 @@ async def analyze_food_photo(
     """
     # Validar formato
     mime = file.content_type or "image/jpeg"
-    if not (mime.startswith("image/") or file.filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
+    if not (mime.startswith("image/") or (file.filename or "").lower().endswith((".jpg", ".jpeg", ".png", ".webp"))):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El archivo debe ser una imagen válida (JPG, PNG, WebP).")
 
-    contents = await file.read()
+    contents = await file.read(10 * 1024 * 1024 + 1)
     if len(contents) > 10 * 1024 * 1024:  # 10 MB límite seguro
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La imagen no debe superar los 10 MB.")
 
@@ -44,7 +45,7 @@ async def analyze_food_photo(
         mime = "image/jpeg"
 
     try:
-        result = FoodVisionService.analyze_food_image(
+        result = await run_in_threadpool(FoodVisionService.analyze_food_image,
             db=db,
             patient_id=current_user.id,
             image_bytes=contents,
