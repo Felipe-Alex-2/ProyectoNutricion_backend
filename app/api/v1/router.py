@@ -44,3 +44,6 @@ api_v1_router.include_router(weekly_menu_router)
 api_v1_router.include_router(automation_router)
 
 
+
+from app.api.v1.branches import router as branches_router
+api_v1_router.include_router(branches_router)

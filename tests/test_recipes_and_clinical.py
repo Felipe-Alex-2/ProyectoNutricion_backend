@@ -7,7 +7,7 @@ from app.core.security import hash_password, create_access_token
 @pytest.fixture
 def test_setup(db_session):
     # Crear roles básicos
-    admin_role = Role(id="ADMIN_SAAS", name="Admin SaaS", description="Global", platform="Web")
+    admin_role = Role(id="SUPERADMIN", name="Admin SaaS", description="Global", platform="Web")
     nutri_role = Role(id="NUTRICIONISTA", name="Nutricionista", description="Nutri", platform="Web")
     cliente_role = Role(id="CLIENTE", name="Cliente", description="Paciente", platform="Mobile")
     db_session.add_all([admin_role, nutri_role, cliente_role])
@@ -19,7 +19,7 @@ def test_setup(db_session):
         email="admin@nutrisalud.com",
         hashed_password=hash_password("Password123!"),
         full_name="Admin Principal",
-        role_id="ADMIN_SAAS",
+        role_id="SUPERADMIN",
         is_active=True,
     )
     nutri = User(

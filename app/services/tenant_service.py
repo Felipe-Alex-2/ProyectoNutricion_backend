@@ -2,6 +2,8 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.tenant import Tenant
+from app.models.company import Branch, CompanyAdministrator
+from app.core.exceptions import BadRequestException
 from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantUpdate
 from app.core.exceptions import ConflictException, NotFoundException
@@ -17,6 +19,8 @@ class TenantService:
 
         # Augment with users count
         for t in tenants:
+            assignment = db.get(CompanyAdministrator, t.id)
+            t.administrator_id = assignment.user_id if assignment else None
             t.users_count = db.query(User).filter(User.tenant_id == t.id).count()
         return tenants
 
@@ -25,11 +29,19 @@ class TenantService:
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if not tenant:
             raise NotFoundException("Organización / Tenant no encontrado")
+        assignment = db.get(CompanyAdministrator, tenant.id)
+        tenant.administrator_id = assignment.user_id if assignment else None
         tenant.users_count = db.query(User).filter(User.tenant_id == tenant.id).count()
         return tenant
 
     @staticmethod
     def create(db: Session, data: TenantCreate) -> Tenant:
+        if not data.administrator_id: raise BadRequestException('Selecciona una cuenta administradora para la empresa.')
+        administrator = db.get(User, data.administrator_id)
+        if not administrator or not administrator.is_active or administrator.role_id != 'ADMIN_ORGANIZATION':
+            raise BadRequestException('Selecciona una cuenta activa con rol Administrador.')
+        if administrator.tenant_id or db.query(CompanyAdministrator).filter_by(user_id=administrator.id).first():
+            raise BadRequestException('La cuenta administradora ya pertenece a una empresa.')
         # Validacion 1: Campos vacios
         clean_name = data.name.strip() if data.name else ""
         clean_code = data.code.strip().upper() if data.code else ""
@@ -57,9 +69,16 @@ class TenantService:
             is_active=data.is_active,
         )
         db.add(tenant)
+        db.flush()
+        branch = Branch(tenant_id=tenant.id, name=data.initial_branch_name.strip(), code=data.initial_branch_code.strip().upper(), address=data.address)
+        db.add(branch); db.flush()
+        administrator.tenant_id = tenant.id; administrator.branch_id = branch.id
+        administrator.session_version = (administrator.session_version or 0) + 1
+        db.add(CompanyAdministrator(tenant_id=tenant.id, user_id=administrator.id))
         db.commit()
         db.refresh(tenant)
-        tenant.users_count = 0
+        tenant.administrator_id = administrator.id
+        tenant.users_count = 1
         return tenant
 
     @staticmethod
@@ -98,7 +117,13 @@ class TenantService:
     @staticmethod
     def delete(db: Session, tenant_id: str) -> None:
         tenant = TenantService.get_by_id(db, tenant_id)
-        # Unlink users before deletion so they aren't deleted
-        db.query(User).filter(User.tenant_id == tenant.id).update({"tenant_id": None})
+        if db.query(User).filter(User.tenant_id == tenant.id).first():
+            raise ConflictException('La empresa tiene cuentas u operaciones asociadas. Desactívala para conservar sus datos.')
+        from app.database import Base
+        from sqlalchemy import select
+        for table in Base.metadata.sorted_tables:
+            if 'tenant_id' in table.c and table.name not in {'branches', 'company_administrators'}:
+                if db.execute(select(table.c.tenant_id).where(table.c.tenant_id == tenant.id).limit(1)).first():
+                    raise ConflictException('La empresa contiene operaciones. Desactívala para conservar sus datos.')
         db.delete(tenant)
         db.commit()

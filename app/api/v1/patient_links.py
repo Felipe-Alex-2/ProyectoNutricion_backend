@@ -31,7 +31,7 @@ def list_links(
     current_user: User = Depends(get_current_user),
 ):
     # Nutritionist can see their own or all for SaaS Admin
-    nutri_id = None if current_user.role_id == "ADMIN_SAAS" else current_user.id
+    nutri_id = None if current_user.role_id == "SUPERADMIN" else current_user.id
     return PatientLinkService.list_links(db, nutritionist_id=nutri_id, tenant_id=tenant_id)
 
 

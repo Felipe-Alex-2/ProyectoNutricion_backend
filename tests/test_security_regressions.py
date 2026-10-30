@@ -15,12 +15,12 @@ from app.services.user_service import UserService
 
 @pytest.fixture
 def accounts(db_session):
-    for role in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA", "CLIENTE"]:
+    for role in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA", "CLIENTE"]:
         db_session.add(Role(id=role, name=role, description=role, platform="Web"))
     db_session.add_all([Tenant(id="a", name="Clinic A", code="A"), Tenant(id="b", name="Clinic B", code="B"), Permission(id="roles:manage", name="Roles", description="Roles", module="SaaS")])
     db_session.commit()
     users = {}
-    for identity, role, tenant in [("patient", "CLIENTE", "a"), ("other", "CLIENTE", "b"), ("nutri", "NUTRICIONISTA", "a"), ("org", "ADMIN_ORGANIZATION", "a"), ("global", "ADMIN_SAAS", None)]:
+    for identity, role, tenant in [("patient", "CLIENTE", "a"), ("other", "CLIENTE", "b"), ("nutri", "NUTRICIONISTA", "a"), ("org", "ADMIN_ORGANIZATION", "a"), ("global", "SUPERADMIN", None)]:
         user = User(id=identity, full_name=identity, email=f"{identity}@example.com", hashed_password="unused", role_id=role, tenant_id=tenant, is_active=True)
         db_session.add(user)
         users[identity] = user
@@ -32,7 +32,7 @@ def headers(identity):
     return {"Authorization": f"Bearer {create_access_token(subject=identity)}"}
 
 
-@pytest.mark.parametrize("field,value", [("role_id", "ADMIN_SAAS"), ("tenant_id", "b"), ("is_active", False)])
+@pytest.mark.parametrize("field,value", [("role_id", "SUPERADMIN"), ("tenant_id", "b"), ("is_active", False)])
 def test_profile_cannot_modify_administrative_fields(client, accounts, field, value):
     response = client.put("/api/v1/users/me", headers=headers("patient"), json={field: value})
     assert response.status_code == 422
@@ -41,7 +41,7 @@ def test_profile_cannot_modify_administrative_fields(client, accounts, field, va
 
 
 @pytest.mark.parametrize("method,path,body", [
-    ("put", "/organization-users/other", {"role_id": "ADMIN_SAAS"}),
+    ("put", "/organization-users/other", {"role_id": "SUPERADMIN"}),
     ("delete", "/organization-users/other", None),
     ("patch", "/organization-users/other/toggle-status", None),
     ("put", "/roles/CLIENTE/permissions", {"permission_ids": ["roles:manage"]}),
@@ -125,17 +125,17 @@ def test_password_change_invalidates_existing_sessions(client):
 
 
 def test_encrypted_backup_and_global_download_denial(client, db_session, accounts):
-    result = BackupService.create_backup(db_session)
+    result = BackupService.create_backup(db_session, tenant_id="b")
     raw = Path(result["filepath"]).read_text()
     assert '"ciphertext"' in raw and "hashed_password" not in raw
     envelope = json.loads(raw)
     snapshot = json.loads(BackupService._cipher().decrypt(envelope["ciphertext"].encode()))
-    assert {"nutritional_plans", "food_records", "chat_messages", "device_tokens"} <= snapshot["tables"].keys()
+    assert set(snapshot["tables"]) == {"payments", "recipes", "recipe_assignments", "nutritional_plans", "appointments", "activity_logs", "generated_reports"}
     assert client.get(f"/api/v1/backup/download/{result['filename']}", headers=headers("org")).status_code == 403
-    assert client.post("/api/v1/backup/restore", headers=headers("org"), files={"file": ("backup.json", raw, "application/json")}).status_code == 403
+    assert client.post("/api/v1/backup/preview", headers=headers("org"), files={"file": ("backup.json", raw, "application/json")}).status_code == 400
     envelope["ciphertext"] = "altered"
-    with pytest.raises(ValueError):
-        BackupService.restore_backup_from_json(db_session, envelope)
+    from app.services.backup_recovery_service import BackupRecoveryService
+    with pytest.raises(ValueError): BackupRecoveryService.parse(envelope,"b")
 
 
 def test_patient_list_uses_bounded_query_count(db_session, accounts):
@@ -193,14 +193,17 @@ def test_paypal_completed_capture_accepts_exact_amount():
     assert PayPalService.validate_completed_payment(order, 5, "USD")["id"] == "capture"
 
 
-def test_encrypted_global_backup_roundtrip_restores_and_revokes_sessions(db_session, accounts):
-    backup = BackupService.create_backup(db_session, user_name="Test")
-    envelope = json.loads(Path(backup["filepath"]).read_text(encoding="utf-8"))
+def test_backup_never_restores_accounts_or_overwrites_existing(db_session, accounts):
+    from app.services.backup_recovery_service import BackupRecoveryService
+    from app.core.security import hash_password
+    accounts["org"].hashed_password = hash_password("Password123!")
+    db_session.commit()
+    backup = BackupService.create_backup(db_session, tenant_id="a")
+    content = Path(backup["filepath"]).read_bytes()
     accounts["patient"].full_name = "Changed after backup"
     db_session.commit()
-    result = BackupService.restore_backup_from_json(db_session, envelope)
-    db_session.expire_all()
-    restored = db_session.get(User, "patient")
-    assert result.success
-    assert restored.full_name == "patient"
-    assert restored.session_version == 1
+    preview = BackupRecoveryService.preview(db_session, content, "a", accounts["org"])
+    result = BackupRecoveryService.restore(db_session, content,"a",accounts["org"],preview["review_token"],"Password123!")
+    assert result["success"]
+    assert accounts["patient"].full_name == "Changed after backup"
+    assert accounts["patient"].session_version == 0

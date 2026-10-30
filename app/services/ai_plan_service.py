@@ -180,11 +180,12 @@ class AIPlanService:
             raise ValueError("Plan nutricional no encontrado.")
 
         # Desactivar planes anteriores aprobados para el mismo paciente
-        db.query(NutritionalPlan).filter(
+        for previous in db.query(NutritionalPlan).filter(
             NutritionalPlan.patient_id == plan.patient_id,
             NutritionalPlan.id != plan_id,
             NutritionalPlan.status == "APPROVED",
-        ).update({"status": "ARCHIVED"})
+        ).all():
+            previous.status = "ARCHIVED"
 
         plan.status = "APPROVED"
         plan.nutritionist_id = nutritionist_id

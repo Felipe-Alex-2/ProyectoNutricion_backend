@@ -90,3 +90,22 @@ def cancel_appointment(
     return AppointmentService.cancel_appointment(
         db=db, appointment_id=appointment_id, reason=reason, current_user=current_user
     )
+
+
+@router.post('/{appointment_id}/complete', response_model=AppointmentOut)
+def complete_appointment(appointment_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.core.authorization import STAFF_ROLES, require_role, require_tenant
+    from app.core.exceptions import BadRequestException, NotFoundException, ForbiddenException
+    from app.models.appointment import Appointment
+    from datetime import datetime, timezone
+    require_role(current_user, STAFF_ROLES)
+    appointment = db.get(Appointment, appointment_id)
+    if not appointment: raise NotFoundException('Cita no encontrada.')
+    require_tenant(current_user, appointment.tenant_id)
+    if current_user.role_id == 'NUTRICIONISTA' and appointment.nutritionist_id != current_user.id: raise ForbiddenException('La cita pertenece a otro especialista.')
+    if appointment.status == 'COMPLETED': return AppointmentService._to_out(appointment)
+    if appointment.status != 'CONFIRMED': raise BadRequestException('Solo se puede completar una cita confirmada.')
+    if appointment.scheduled_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc): raise BadRequestException('La cita todavía no ocurrió.')
+    appointment.status = 'COMPLETED'; appointment.completed_at = datetime.now(timezone.utc)
+    db.commit(); db.refresh(appointment)
+    return AppointmentService._to_out(appointment)

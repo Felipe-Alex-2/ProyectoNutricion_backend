@@ -24,7 +24,7 @@ router = APIRouter(prefix="/reports", tags=["Reportes Dinámicos"])
 
 
 def ensure_staff(user: User):
-    if user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para acceder al módulo de reportes dinámicos.")
 
 
@@ -48,6 +48,8 @@ def query_report(
         return report
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error consultando reporte: {str(e)}")
 
@@ -72,10 +74,16 @@ def execute_voice_report_command(
             current_user,
             db,
             tenant_id=request.tenant_id,
+            tenant_ids=request.tenant_ids,
+            branch_ids=request.branch_ids,
         )
         return result
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error al procesar comando por voz: {str(e)}")
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo interpretar la solicitud. Intenta con una petición más concreta.")
 
 
 @router.post("/voice-summary", response_model=VoiceReportSummaryResponse)
@@ -89,6 +97,8 @@ def generate_voice_summary(
     ensure_staff(current_user)
     try:
         return ReportService.generate_voice_summary(request)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error generando resumen por voz: {str(e)}")
 
@@ -101,6 +111,8 @@ def export_report_excel(
 ):
     ensure_staff(current_user)
     report = ReportService.query_report_data(db, request, current_user)
+    from app.services.generated_report_service import GeneratedReportService
+    GeneratedReportService.save(db, request, current_user, report)
     excel_stream = ReportService.generate_excel(report)
 
     # Registrar en bitácora
@@ -133,6 +145,8 @@ def export_report_pdf(
 ):
     ensure_staff(current_user)
     report = ReportService.query_report_data(db, request, current_user)
+    from app.services.generated_report_service import GeneratedReportService
+    GeneratedReportService.save(db, request, current_user, report)
     pdf_stream = ReportService.generate_pdf(report)
 
     # Registrar en bitácora
@@ -155,3 +169,30 @@ def export_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get('/saved')
+def saved_reports(tenant_id: str = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.generated_report_service import GeneratedReportService
+    ensure_staff(current_user)
+    return [{'id':r.id,'tenant_id':r.tenant_id,'title':r.title,'entity':r.entity,'created_at':r.created_at} for r in GeneratedReportService.list(db,current_user,tenant_id)]
+
+@router.post('/saved', status_code=201)
+def save_report(request: ReportQueryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.generated_report_service import GeneratedReportService
+    ensure_staff(current_user)
+    report = GeneratedReportService.save(db,request,current_user)
+    return {'id':report.id,'title':report.title,'created_at':report.created_at}
+
+@router.get('/saved/{report_id}')
+def get_saved_report(report_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import json
+    from app.services.generated_report_service import GeneratedReportService
+    ensure_staff(current_user)
+    return json.loads(GeneratedReportService.get(db,current_user,report_id).snapshot_json)
+
+@router.delete('/saved/{report_id}', status_code=204)
+def delete_saved_report(report_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.generated_report_service import GeneratedReportService
+    ensure_staff(current_user)
+    db.delete(GeneratedReportService.get(db,current_user,report_id));db.commit()

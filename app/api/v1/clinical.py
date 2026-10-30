@@ -80,14 +80,14 @@ def get_patient_anamnesis_by_staff(
 ):
     require_patient_access(db, current_user, patient_id)
     """Nutricionistas y Administradores consultan la anamnesis del paciente en la Web."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso no autorizado.")
 
     patient = db.query(User).filter(User.id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente no encontrado.")
 
-    # Validar aislamiento de clínica si no es ADMIN_SAAS
+    # Validar aislamiento de clínica si no es SUPERADMIN
     if current_user.role_id == "ADMIN_ORGANIZATION" and patient.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Paciente no pertenece a tu clínica.")
 
@@ -119,7 +119,7 @@ def get_patient_clinical_records(
 ):
     require_patient_access(db, current_user, patient_id, allow_self=True)
     """Consultar las notas diagnósticas y evolución clínica del paciente (Web)."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         if current_user.id != patient_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
 
@@ -141,7 +141,7 @@ def create_clinical_record(
 ):
     require_patient_access(db, current_user, patient_id)
     """El Nutricionista o Administrador registra diagnóstico o nota de evolución clínica (Web)."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales de salud pueden asentar notas clínicas.")
 
     patient = db.query(User).filter(User.id == patient_id).first()
@@ -187,7 +187,7 @@ def get_ai_recipe_recommendations(
     Asistente Inteligente IA para apoyo al nutricionista: analiza anamnesis,
     historial, alergias y metas del paciente para recomendar recetas con justificación médica.
     """
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a herramientas de prescripción clínica.")
 
     try:

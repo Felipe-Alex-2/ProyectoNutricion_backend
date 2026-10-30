@@ -18,7 +18,7 @@ def main():
     with get_session_local()() as db:
         if db.query(User).filter_by(email=str(data.email).lower()).first():
             raise SystemExit("Email already exists; refusing to change an existing account.")
-        db.add(User(email=str(data.email).lower(), full_name=data.full_name, hashed_password=get_password_hash(password), role_id="ADMIN_SAAS", is_active=True))
+        db.add(User(email=str(data.email).lower(), full_name=data.full_name, hashed_password=get_password_hash(password), role_id="SUPERADMIN", is_active=True))
         db.commit()
     print("Administrator created. No other accounts were modified.")
 

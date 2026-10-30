@@ -34,5 +34,5 @@ def update_role_permissions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_role(current_user, {"ADMIN_SAAS"})
+    require_role(current_user, {"SUPERADMIN"})
     return RBACService.update_role_permissions(db, role_id, data.permission_ids)

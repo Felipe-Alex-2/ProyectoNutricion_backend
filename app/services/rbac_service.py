@@ -7,7 +7,7 @@ from app.schemas.rbac import RoleResponse, PermissionResponse
 class RBACService:
     @staticmethod
     def get_all_roles(db: Session) -> List[RoleResponse]:
-        roles = db.query(Role).all()
+        roles = db.query(Role).filter(Role.id != "ADMIN_SAAS").all()
         result = []
         for role in roles:
             # Query mapped permissions
@@ -58,7 +58,8 @@ class RBACService:
             raise NotFoundException("Rol no encontrado")
 
         # Delete existing permissions for this role
-        db.query(RolePermission).filter(RolePermission.role_id == role_id).delete()
+        for association in db.query(RolePermission).filter(RolePermission.role_id == role_id).all():
+            db.delete(association)
 
         # Insert new permission associations
         for pid in permission_ids:

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class AppointmentCreate(BaseModel):
+    branch_id: Optional[str] = None
     nutritionist_id: str = Field(..., description="ID del nutricionista asignado")
     scheduled_at: datetime = Field(..., description="Fecha y hora de la cita programada")
     reason: Optional[str] = Field(None, description="Motivo opcional de la consulta")
@@ -15,6 +16,8 @@ class AppointmentCancel(BaseModel):
 
 
 class AppointmentOut(BaseModel):
+    branch_id: Optional[str] = None
+    completed_at: Optional[datetime] = None
     id: str
     tenant_id: Optional[str] = None
     tenant_name: Optional[str] = None

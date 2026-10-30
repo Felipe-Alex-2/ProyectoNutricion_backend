@@ -33,6 +33,7 @@ class PaymentService:
         return PaymentOut(
             id=p.id,
             tenant_id=p.tenant_id,
+            branch_id=p.branch_id,
             tenant_name=p.tenant.name if p.tenant else None,
             cashier_id=p.cashier_id,
             cashier_name=p.cashier.full_name if p.cashier else None,
@@ -66,6 +67,8 @@ class PaymentService:
                 detail=f"Sucursal con ID {data.tenant_id} no encontrada",
             )
 
+        from app.services.branch_scope import operation_branch
+        branch_id = operation_branch(db, data.tenant_id, data.branch_id, cashier.branch_id if cashier.tenant_id == data.tenant_id else None)
         method = (data.payment_method or "PAYPAL").upper()
 
         # 2. If Cash (EFECTIVO), record directly as COMPLETED without calling PayPal
@@ -73,6 +76,7 @@ class PaymentService:
             now = datetime.now(timezone.utc)
             payment = Payment(
                 tenant_id=data.tenant_id,
+                branch_id=branch_id,
                 cashier_id=cashier.id,
                 customer_name=data.customer_name,
                 customer_email=data.customer_email,
@@ -127,6 +131,7 @@ class PaymentService:
         # Store Payment in DB as PENDING PayPal order
         payment = Payment(
             tenant_id=data.tenant_id,
+            branch_id=branch_id,
             cashier_id=cashier.id,
             customer_name=data.customer_name,
             customer_email=data.customer_email,

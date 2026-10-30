@@ -18,6 +18,7 @@ class User(Base):
     role_id = Column(String(50), ForeignKey("roles.id", ondelete="RESTRICT"), default="CLIENTE", nullable=False)
     tenant_id = Column(String(36), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    branch_id = Column(String(36), ForeignKey('branches.id', ondelete='SET NULL'), nullable=True, index=True)
     session_version = Column(Integer, nullable=False, default=0, server_default="0")
     is_active = Column(Boolean, default=True, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)

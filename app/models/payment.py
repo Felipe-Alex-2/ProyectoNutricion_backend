@@ -9,6 +9,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    branch_id = Column(String(36), ForeignKey('branches.id', ondelete='SET NULL'), nullable=True, index=True)
     tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
     cashier_id = Column(String(36), ForeignKey("users.id"), nullable=True)
 

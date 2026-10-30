@@ -50,11 +50,20 @@ class AuthService:
             if not tenant:
                 raise BadRequestException(detail="La sucursal seleccionada no existe o no está activa.")
 
+        if request.branch_id:
+            from app.models.company import Branch
+            branch = db.get(Branch, request.branch_id)
+            if not branch or not branch.is_active or branch.tenant_id != request.tenant_id:
+                raise BadRequestException('La sucursal no pertenece a la empresa seleccionada.')
+
         user = UserService.create(
             db,
             obj_in=request,  # matches email, password, full_name, tenant_id
             role_id=assigned_role,
         )
+        from app.models.activity_log import ActivityLog
+        db.add(ActivityLog(tenant_id=user.tenant_id, user_id=user.id, user_name=user.full_name, user_email=user.email, action='CUENTA_CREADA', description='Registro de cuenta de paciente.', category='OPERACIONES'))
+        db.commit()
         return user
 
     @staticmethod

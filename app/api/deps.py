@@ -45,6 +45,7 @@ def get_current_user(
     if not user.is_active:
         raise AuthException(detail="User account is inactive")
 
+    db.info['audit_actor'] = user
     return user
 
 

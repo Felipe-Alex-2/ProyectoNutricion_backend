@@ -16,6 +16,7 @@ class ActivityLog(Base):
     __tablename__ = "activity_logs"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    tenant_id = Column(String(36), ForeignKey('tenants.id', ondelete='SET NULL'), nullable=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     user_email = Column(String(255), nullable=True)
     user_name = Column(String(255), nullable=True)

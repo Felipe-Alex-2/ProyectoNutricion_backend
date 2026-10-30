@@ -7,7 +7,7 @@ from app.database import Base
 class Role(Base):
     __tablename__ = "roles"
 
-    id = Column(String(50), primary_key=True)  # E.g. ADMIN_SAAS, ADMIN_ORGANIZATION, NUTRICIONISTA, CLIENTE
+    id = Column(String(50), primary_key=True)  # E.g. SUPERADMIN, ADMIN_ORGANIZATION, NUTRICIONISTA, CLIENTE
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=False)
     platform = Column(String(100), nullable=False)  # Web, Móvil, etc.

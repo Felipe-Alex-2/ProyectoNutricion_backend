@@ -7,7 +7,6 @@ class ActivityLogCreate(BaseModel):
     action: str
     description: str
     category: Optional[str] = "SISTEMA"
-    ip_address: Optional[str] = None
 
 
 class ActivityLogResponse(BaseModel):
@@ -18,7 +17,6 @@ class ActivityLogResponse(BaseModel):
     action: str
     description: str
     category: str
-    ip_address: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

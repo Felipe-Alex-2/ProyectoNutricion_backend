@@ -33,7 +33,7 @@ def generate_plan_draft(
     if current_user.role_id in ["CLIENTE", "PACIENTE"] and current_user.id != data.patient_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes generar planes para otro usuario.")
 
-    nutritionist_id = current_user.id if current_user.role_id in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "ADMIN_SAAS"] else None
+    nutritionist_id = current_user.id if current_user.role_id in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "SUPERADMIN"] else None
 
     try:
         plan = AIPlanService.generate_plan_draft(
@@ -63,7 +63,7 @@ def update_plan(
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     require_patient_access(db, current_user, existing_plan.patient_id)
     """El Nutricionista edita las calorías, macronutrientes, notas o comidas del plan."""
-    if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "ADMIN_SAAS"]:
+    if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "SUPERADMIN"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales pueden editar planes nutricionales.")
 
     try:
@@ -95,7 +95,7 @@ def approve_plan(
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     require_patient_access(db, current_user, existing_plan.patient_id)
     """El Nutricionista aprueba el plan, activándolo para el paciente."""
-    if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "ADMIN_SAAS"]:
+    if current_user.role_id not in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "SUPERADMIN"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo profesionales pueden aprobar planes.")
 
     try:

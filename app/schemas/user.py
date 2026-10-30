@@ -115,6 +115,7 @@ class DeveloperKeyVerifyResponse(BaseModel):
 
 
 class UserResponse(UserBase):
+    branch_id: Optional[str] = None
     id: str
     role_id: str
     tenant_id: Optional[str] = None

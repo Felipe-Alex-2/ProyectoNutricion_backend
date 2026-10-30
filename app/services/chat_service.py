@@ -168,5 +168,6 @@ class ChatService:
     @classmethod
     def clear_history(cls, db: Session, patient_id: str) -> None:
         """Limpia el historial de chat si el paciente lo solicita."""
-        db.query(ChatMessage).filter(ChatMessage.patient_id == patient_id).delete()
+        for message in db.query(ChatMessage).filter(ChatMessage.patient_id == patient_id).all():
+            db.delete(message)
         db.commit()

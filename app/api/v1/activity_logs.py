@@ -27,8 +27,6 @@ def record_log(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if not data.ip_address:
-        data.ip_address = request.client.host if request.client else None
     return ActivityLogService.log(db, user=current_user, data=data)
 
 

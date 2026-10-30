@@ -14,7 +14,7 @@ from app.models.rbac import Role
 @pytest.fixture
 def multi_tenant_setup(db_session):
     # Asegurar roles básicos
-    for r_id, r_name in [("ADMIN_SAAS", "Admin"), ("ADMIN_ORGANIZATION", "Admin Org"), ("NUTRICIONISTA", "Nutri"), ("CLIENTE", "Cliente")]:
+    for r_id, r_name in [("SUPERADMIN", "Admin"), ("ADMIN_ORGANIZATION", "Admin Org"), ("NUTRICIONISTA", "Nutri"), ("CLIENTE", "Cliente")]:
         existing_role = db_session.query(Role).filter(Role.id == r_id).first()
         if not existing_role:
             db_session.add(Role(id=r_id, name=r_name, description=r_name, platform="Web"))
@@ -68,6 +68,13 @@ def multi_tenant_setup(db_session):
 
     db_session.add_all([nutri_a, paciente_a, nutri_b, paciente_b])
     db_session.commit()
+    from app.models.patient_link import PatientNutritionistLink
+    db_session.add_all([
+        PatientNutritionistLink(tenant_id=t1.id,patient_id=paciente_a.id,nutritionist_id=nutri_a.id,status='LINKED',pairing_code='LINKALPHA'),
+        PatientNutritionistLink(tenant_id=t2.id,patient_id=paciente_b.id,nutritionist_id=nutri_b.id,status='LINKED',pairing_code='LINKBETA'),
+    ])
+    db_session.commit()
+
 
     # Receta propia de Alpha
     recipe_a = Recipe(

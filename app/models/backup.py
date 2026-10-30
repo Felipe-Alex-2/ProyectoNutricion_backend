@@ -8,7 +8,7 @@ class BackupSetting(Base):
     __tablename__ = "backup_settings"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String(36), nullable=True, index=True)  # Null para ADMIN_SAAS global, o ID del tenant
+    tenant_id = Column(String(36), nullable=True, index=True)  # Null para SUPERADMIN global, o ID del tenant
     auto_backup_enabled = Column(Boolean, default=False, nullable=False)
     frequency_hours = Column(Integer, default=24, nullable=False)  # 6, 12, 24 (diario), 168 (semanal)
     last_backup_at = Column(DateTime, nullable=True)

@@ -79,17 +79,17 @@ def list_patients(
     offset: int = Query(0, ge=0),
     search: Optional[str] = Query(None, description="Búsqueda por nombre, correo o teléfono"),
     is_active: Optional[bool] = Query(None, description="Filtrar por estado activo"),
-    tenant_id: Optional[str] = Query(None, description="Filtrar por organización / tenant (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por organización / tenant (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Retorna la lista de pacientes accesibles según el rol del usuario."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para consultar la lista de clientes.")
 
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         require_tenant(current_user, current_user.tenant_id)
-    tenant_filter = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    tenant_filter = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
     patients = UserService.list_patients(
         db,
         tenant_id=tenant_filter,
@@ -114,10 +114,10 @@ def update_patient(
     db: Session = Depends(get_db),
 ):
     require_patient_access(db, current_user, patient_id)
-    if (data.password or data.developer_key) and current_user.role_id != "ADMIN_SAAS":
+    if (data.password or data.developer_key) and current_user.role_id != "SUPERADMIN":
         raise ForbiddenException("Solo administración global puede restablecer credenciales.")
     """Permite al especialista o administrador actualizar datos de contacto de un cliente."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para modificar datos de clientes.")
 
     patient = UserService.get_by_id(db, patient_id)
@@ -164,7 +164,7 @@ def delete_patient(
 ):
     require_patient_access(db, current_user, patient_id)
     """Desactiva un cliente y anula sus vinculaciones activas."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise ForbiddenException("No tienes permisos para desactivar clientes.")
 
     patient = UserService.get_by_id(db, patient_id)

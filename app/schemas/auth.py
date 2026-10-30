@@ -11,6 +11,8 @@ class RegisterRequest(BaseModel):
     client_platform: Optional[str] = Field("web", description="Plataforma de origen: 'web' o 'mobile'")
     tenant_id: Optional[str] = Field(None, description="ID de la sucursal seleccionada")
 
+    branch_id: Optional[str] = None
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:

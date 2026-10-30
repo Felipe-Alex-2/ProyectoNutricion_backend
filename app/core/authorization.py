@@ -4,8 +4,8 @@ from app.core.exceptions import ForbiddenException, NotFoundException
 from app.models.user import User
 from app.models.patient_link import PatientNutritionistLink
 
-STAFF_ROLES = {"ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"}
-ADMIN_ROLES = {"ADMIN_SAAS", "ADMIN_ORGANIZATION"}
+STAFF_ROLES = {"SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"}
+ADMIN_ROLES = {"SUPERADMIN", "ADMIN_ORGANIZATION"}
 VALID_ROLES = STAFF_ROLES | {"CLIENTE"}
 
 
@@ -15,7 +15,7 @@ def require_role(user: User, roles: set[str]) -> None:
 
 
 def require_tenant(user: User, tenant_id: str | None) -> None:
-    if user.role_id == "ADMIN_SAAS":
+    if user.role_id == "SUPERADMIN":
         return
     if not user.tenant_id or not tenant_id or user.tenant_id != tenant_id:
         raise ForbiddenException("El recurso no pertenece a tu organización.")
@@ -25,7 +25,7 @@ def require_user_management(actor: User, target: User | None = None) -> None:
     require_role(actor, ADMIN_ROLES)
     if target is not None:
         require_tenant(actor, target.tenant_id)
-        if actor.role_id != "ADMIN_SAAS" and target.role_id == "ADMIN_SAAS":
+        if actor.role_id != "SUPERADMIN" and target.role_id == "SUPERADMIN":
             raise ForbiddenException("No puedes gestionar un administrador global.")
 
 
@@ -36,7 +36,7 @@ def require_patient_access(db: Session, actor: User, patient_id: str, *, allow_s
     if allow_self and actor.id == patient.id:
         return patient
     require_role(actor, STAFF_ROLES)
-    if actor.role_id == "ADMIN_SAAS":
+    if actor.role_id == "SUPERADMIN":
         return patient
     require_tenant(actor, patient.tenant_id)
     if actor.role_id == "NUTRICIONISTA":

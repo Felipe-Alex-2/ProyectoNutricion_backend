@@ -82,7 +82,10 @@ class AppointmentService:
                 detail=f"Ya tienes una cita agendada o pendiente a las {conf_time} en ese intervalo de 30 minutos. Por favor selecciona otro horario.",
             )
 
+        from app.services.branch_scope import operation_branch
+        branch_id = operation_branch(db, tenant_id, data.branch_id, current_user.branch_id if current_user.tenant_id == tenant_id else None)
         appointment = Appointment(
+            branch_id=branch_id,
             **({"id": appointment_id} if appointment_id else {}),
             tenant_id=tenant_id,
             patient_id=current_user.id,
@@ -113,7 +116,7 @@ class AppointmentService:
                 db.query(User)
                 .filter(
                     User.tenant_id == tenant_id,
-                    User.role_id.in_(["ADMIN_ORGANIZATION", "ADMIN_SAAS"]),
+                    User.role_id.in_(["ADMIN_ORGANIZATION", "SUPERADMIN"]),
                     User.id != current_user.id,
                     User.id != nutritionist.id,
                 )
@@ -141,7 +144,7 @@ class AppointmentService:
         nutritionist_id: Optional[str] = None,
     ) -> List[AppointmentOut]:
         query = db.query(Appointment).options(joinedload(Appointment.patient), joinedload(Appointment.nutritionist), joinedload(Appointment.tenant))
-        if current_user.role_id not in {"ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA", "CLIENTE"}:
+        if current_user.role_id not in {"SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA", "CLIENTE"}:
             raise HTTPException(status_code=403, detail="Rol sin acceso a citas.")
         if current_user.role_id in {"ADMIN_ORGANIZATION", "NUTRICIONISTA"}:
             require_tenant(current_user, current_user.tenant_id)
@@ -155,7 +158,7 @@ class AppointmentService:
         elif current_user.role_id == "ADMIN_ORGANIZATION":
             if current_user.tenant_id:
                 query = query.filter(Appointment.tenant_id == current_user.tenant_id)
-        elif current_user.role_id == "ADMIN_SAAS":
+        elif current_user.role_id == "SUPERADMIN":
             if tenant_id:
                 query = query.filter(Appointment.tenant_id == tenant_id)
 
@@ -178,7 +181,7 @@ class AppointmentService:
             )
 
         # Validar permisos
-        if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+        if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para confirmar esta cita",
@@ -211,6 +214,8 @@ class AppointmentService:
                 detail=f"{nutri_name} ya se encuentra ocupado con una cita confirmada a las {conf_time} (rango de 30 minutos). No es posible confirmar dos citas simultáneas para el mismo doctor.",
             )
 
+        if appointment.status != "PENDING":
+            raise HTTPException(status_code=400, detail="Solo se pueden confirmar citas pendientes.")
         appointment.status = "CONFIRMED"
         appointment.updated_at = datetime.now(timezone.utc)
         db.commit()
@@ -248,13 +253,15 @@ class AppointmentService:
         if current_user.role_id == "CLIENTE":
             if appointment.patient_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Solo puedes cancelar tus propias citas.")
-        elif current_user.role_id in {"ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"}:
+        elif current_user.role_id in {"SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"}:
             require_tenant(current_user, appointment.tenant_id)
             if current_user.role_id == "NUTRICIONISTA" and appointment.nutritionist_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Solo puedes cancelar tus propias citas.")
         else:
             raise HTTPException(status_code=403, detail="No puedes cancelar esta cita.")
 
+        if appointment.status == "COMPLETED":
+            raise HTTPException(status_code=400, detail="Una cita atendida no se puede cancelar.")
         appointment.status = "CANCELLED"
         appointment.cancellation_reason = reason or "Cancelada por el administrador/especialista"
         appointment.updated_at = datetime.now(timezone.utc)
@@ -299,7 +306,7 @@ class AppointmentService:
         query = db.query(User).filter(User.role_id == "NUTRICIONISTA", User.is_active == True)
         if target_tenant:
             query = query.filter(User.tenant_id == target_tenant)
-        elif current_user.role_id != "ADMIN_SAAS":
+        elif current_user.role_id != "SUPERADMIN":
             query = query.filter(User.tenant_id == current_user.tenant_id)
 
         nutritionists = query.all()
@@ -318,6 +325,7 @@ class AppointmentService:
         return AppointmentOut(
             id=a.id,
             tenant_id=a.tenant_id,
+            branch_id=a.branch_id,
             tenant_name=a.tenant.name if a.tenant else None,
             patient_id=a.patient_id,
             patient_name=a.patient.full_name if a.patient else None,
@@ -330,4 +338,5 @@ class AppointmentService:
             cancellation_reason=a.cancellation_reason,
             created_at=a.created_at,
             updated_at=a.updated_at,
+            completed_at=a.completed_at,
         )

@@ -25,14 +25,14 @@ def init_db(seed_demo=False):
         # 3. Seed Roles
         roles_data = [
             {
-                "id": "ADMIN_SAAS",
-                "name": "Administrador SaaS (Admin Global)",
+                "id": "SUPERADMIN",
+                "name": "Superadministrador (Admin Global)",
                 "description": "Nivel más alto con control total de la plataforma SaaS y gestión de todas las clínicas.",
                 "platform": "Web",
             },
             {
                 "id": "ADMIN_ORGANIZATION",
-                "name": "Administrador de Organización (Admin Local)",
+                "name": "Administrador de empresa (Admin Local)",
                 "description": "Gestiona una clínica o centro de nutrición específico y a sus usuarios asociados.",
                 "platform": "Web",
             },
@@ -89,7 +89,7 @@ def init_db(seed_demo=False):
 
         # 5. Assign Permissions to Roles
         role_perm_map = {
-            "ADMIN_SAAS": ["tenants:manage", "roles:manage", "users:manage_all", "users:manage_org", "clinical:manage", "patient:link", "patient:self_progress"],
+            "SUPERADMIN": ["tenants:manage", "roles:manage", "users:manage_all", "users:manage_org", "clinical:manage", "patient:link", "patient:self_progress"],
             "ADMIN_ORGANIZATION": ["users:manage_org", "clinical:manage", "patient:link", "patient:self_progress"],
             "NUTRICIONISTA": ["clinical:manage", "patient:link", "patient:self_progress"],
             "CLIENTE": ["patient:self_progress"],

@@ -53,15 +53,15 @@ def get_my_plan_recipes(
 def list_recipes(
     category: Optional[str] = Query(None, description="Filtrar por categoría"),
     difficulty: Optional[str] = Query(None, description="Filtrar por dificultad"),
-    tenant_id: Optional[str] = Query(None, description="Filtrar por tenant (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por tenant (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Lista las recetas disponibles (activas) con sus pacientes asignados."""
     query = db.query(Recipe).filter(Recipe.is_active == True)
 
-    # Filtrar estrictamente por tenant si el usuario no es ADMIN_SAAS, o si ADMIN_SAAS seleccionó un tenant
-    if current_user.role_id != "ADMIN_SAAS":
+    # Filtrar estrictamente por tenant si el usuario no es SUPERADMIN, o si SUPERADMIN seleccionó un tenant
+    if current_user.role_id != "SUPERADMIN":
         query = query.filter(Recipe.tenant_id == current_user.tenant_id)
     elif tenant_id:
         query = query.filter(Recipe.tenant_id == tenant_id)
@@ -82,13 +82,13 @@ def create_recipe(
     db: Session = Depends(get_db),
 ):
     """Crear una nueva receta en la plataforma Web y asignarla a uno o más pacientes."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos para crear recetas culinarias.",
         )
 
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else (data.tenant_id or current_user.tenant_id)
+    tenant_id = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else (data.tenant_id or current_user.tenant_id)
 
     require_tenant(current_user, tenant_id)
     for patient_id in data.assigned_patient_ids or []:
@@ -140,7 +140,7 @@ def create_recipe(
             patient = db.query(User).filter(User.id == p_id).first()
             if not patient:
                 continue
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id and patient.tenant_id != current_user.tenant_id:
+            if current_user.role_id != "SUPERADMIN" and current_user.tenant_id and patient.tenant_id != current_user.tenant_id:
                 raise HTTPException(status_code=403, detail="No puedes asignar recetas a pacientes pertenecientes a otra clínica u organización.")
             db.add(RecipeAssignment(recipe_id=recipe.id, patient_id=p_id))
 
@@ -169,7 +169,7 @@ def get_recipe(
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id, Recipe.is_active == True).first()
     if not recipe:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receta no encontrada.")
-    if current_user.role_id != "ADMIN_SAAS" and recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
+    if current_user.role_id != "SUPERADMIN" and recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes permisos para ver recetas de otra clínica.")
     return _recipe_to_response(recipe)
 
@@ -182,14 +182,14 @@ def update_recipe(
     db: Session = Depends(get_db),
 ):
     """Actualizar datos de una receta y sus asignaciones a pacientes."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
 
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receta no encontrada.")
 
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         if recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes modificar recetas pertenecientes a otra clínica u organización.")
         if current_user.role_id == "NUTRICIONISTA" and recipe.created_by != current_user.id:
@@ -225,12 +225,13 @@ def update_recipe(
 
     # Actualizar asignaciones si vienen en el payload
     if data.assigned_patient_ids is not None:
-        db.query(RecipeAssignment).filter(RecipeAssignment.recipe_id == recipe.id).delete(synchronize_session="fetch")
+        for assignment in db.query(RecipeAssignment).filter(RecipeAssignment.recipe_id == recipe.id).all():
+            db.delete(assignment)
         for p_id in data.assigned_patient_ids:
             patient = db.query(User).filter(User.id == p_id).first()
             if not patient:
                 continue
-            if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id and patient.tenant_id != current_user.tenant_id:
+            if current_user.role_id != "SUPERADMIN" and current_user.tenant_id and patient.tenant_id != current_user.tenant_id:
                 raise HTTPException(status_code=403, detail="No puedes asignar recetas a pacientes pertenecientes a otra clínica u organización.")
             db.add(RecipeAssignment(recipe_id=recipe.id, patient_id=p_id))
         db.flush()
@@ -257,14 +258,14 @@ def delete_recipe(
     db: Session = Depends(get_db),
 ):
     """Desactivar/eliminar una receta."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
 
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receta no encontrada.")
 
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         if recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes eliminar recetas pertenecientes a otra clínica u organización.")
         elif not recipe.tenant_id and recipe.created_by and recipe.created_by != current_user.id:
@@ -292,7 +293,7 @@ def assign_recipe_to_patient(
     db: Session = Depends(get_db),
 ):
     """Asignar una receta a un paciente específico (ej: desde Asistente IA)."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
 
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id, Recipe.is_active == True).first()
@@ -303,7 +304,7 @@ def assign_recipe_to_patient(
     if not patient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paciente no encontrado.")
 
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         if recipe.tenant_id and current_user.tenant_id and recipe.tenant_id != current_user.tenant_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes asignar recetas pertenecientes a otra clínica u organización.")
         if patient.tenant_id and current_user.tenant_id and patient.tenant_id != current_user.tenant_id:

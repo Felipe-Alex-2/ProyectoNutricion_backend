@@ -89,7 +89,7 @@ def create_order(
                 status_code=400,
                 detail="Tu cuenta no está asociada a una organización (tenant). Contacta al administrador.",
             )
-        if current_user.role_id not in ("ADMIN_SAAS", "ADMIN_ORGANIZATION"):
+        if current_user.role_id not in ("SUPERADMIN", "ADMIN_ORGANIZATION"):
             raise HTTPException(
                 status_code=403,
                 detail="Solo los administradores pueden gestionar suscripciones corporativas.",

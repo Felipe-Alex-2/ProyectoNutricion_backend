@@ -1,7 +1,7 @@
 import json
 import os
 from typing import List, Optional
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -25,36 +25,39 @@ router = APIRouter(prefix="/backup", tags=["Copias de Seguridad (Backup)"])
 
 
 def ensure_backup_access(user: User):
-    if user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION"]:
+    if user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION"]:
         raise ForbiddenException("No tiene permisos para gestionar copias de seguridad.")
-    if user.role_id != "ADMIN_SAAS":
+    if user.role_id != "SUPERADMIN":
         require_tenant(user, user.tenant_id)
 
 
 @router.get("/settings", response_model=BackupSettingResponse)
 def get_backup_settings(
-    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    if not effective_tenant: raise BadRequestException('Selecciona una empresa.')
     return BackupService.get_or_create_settings(db, tenant_id=effective_tenant)
 
 
 @router.put("/settings", response_model=BackupSettingResponse)
 def update_backup_settings(
     data: BackupSettingUpdate,
-    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="ID del tenant a configurar (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    if not effective_tenant: raise BadRequestException('Selecciona una empresa.')
     updated = BackupService.update_settings(db, data, tenant_id=effective_tenant)
     try:
         scope_str = f"Tenant {effective_tenant[:8]}" if effective_tenant else "Global"
         db.add(ActivityLog(
+            tenant_id=effective_tenant,
             user_id=current_user.id,
             user_email=current_user.email,
             user_name=current_user.full_name,
@@ -70,17 +73,19 @@ def update_backup_settings(
 
 @router.post("/export", response_model=BackupLogResponse)
 def export_backup_manual(
-    tenant_id: Optional[str] = Query(None, description="ID del tenant para respaldo exclusivo (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="ID del tenant para respaldo exclusivo (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    if not effective_tenant: raise BadRequestException('Selecciona una empresa para respaldar.')
     result = BackupService.create_backup(db, backup_type="MANUAL", user_name=current_user.full_name, tenant_id=effective_tenant)
 
     try:
         scope_str = f"Tenant {effective_tenant[:8]}" if effective_tenant else "Global"
         db.add(ActivityLog(
+            tenant_id=effective_tenant,
             user_id=current_user.id,
             user_email=current_user.email,
             user_name=current_user.full_name,
@@ -98,12 +103,12 @@ def export_backup_manual(
 
 @router.get("/history", response_model=List[BackupLogResponse])
 def get_backup_history(
-    tenant_id: Optional[str] = Query(None, description="ID del tenant (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="ID del tenant (SUPERADMIN)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
     return BackupService.list_backups(db, tenant_id=effective_tenant)
 
 
@@ -114,7 +119,7 @@ def download_backup_file(
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    tenant_id = current_user.tenant_id if current_user.role_id != "ADMIN_SAAS" else None
+    tenant_id = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else None
     if tenant_id:
         log = db.query(BackupLog).filter(BackupLog.filename == filename).first()
         if not log or log.tenant_id != tenant_id:
@@ -124,45 +129,40 @@ def download_backup_file(
     if not filepath or not os.path.exists(filepath):
         raise NotFoundException(f"El archivo de respaldo '{filename}' no se encuentra disponible.")
 
+    import hashlib
+    log = db.query(BackupLog).filter_by(filename=filename).first()
+    if not log: raise NotFoundException('Respaldo no registrado.')
+    with open(filepath, 'rb') as stream: actual = hashlib.sha256(stream.read()).hexdigest()
+    if log.checksum and actual != log.checksum: raise BadRequestException('El respaldo no pasó la verificación de integridad.')
     return FileResponse(
         path=filepath,
         filename=os.path.basename(filepath),
         media_type="application/json",
+        headers={"Cache-Control":"private, no-store", "X-Content-Type-Options":"nosniff"},
     )
 
 
-@router.post("/restore", response_model=BackupRestoreResponse)
-async def restore_backup(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    require_role(current_user, {"ADMIN_SAAS"})
-    tenant_id = None
-    try:
-        content_bytes = await file.read(50 * 1024 * 1024 + 1)
-        if len(content_bytes) > 50 * 1024 * 1024:
-            raise ValueError("El respaldo supera el límite de 50 MB.")
-        json_data = json.loads(content_bytes.decode("utf-8"))
-    except Exception as e:
-        raise BadRequestException(f"El archivo subido no es un JSON válido: {str(e)}")
+def resolve_backup_company(user, tenant_id):
+    ensure_backup_access(user)
+    company = tenant_id if user.role_id == 'SUPERADMIN' else user.tenant_id
+    if not company: raise BadRequestException('Selecciona una empresa.')
+    if user.role_id != 'SUPERADMIN' and tenant_id and tenant_id != company: raise ForbiddenException('El respaldo pertenece a otra empresa.')
+    return company
 
-    try:
-        res = await run_in_threadpool(BackupService.restore_backup_from_json, db, json_data, tenant_id=tenant_id)
 
-        scope_str = f"Tenant {tenant_id[:8]}" if tenant_id else "Global"
-        db.add(ActivityLog(
-            user_id=current_user.id,
-            user_email=current_user.email,
-            user_name=current_user.full_name,
-            action="BACKUP_RESTAURADO",
-            description=f"Restauración ejecutada [{scope_str}] desde archivo '{file.filename}': {res.records_restored} registros.",
-            category="SYSTEM",
-        ))
-        db.commit()
-        return res
-    except ValueError as ve:
-        raise BadRequestException(str(ve))
-    except Exception as e:
-        db.rollback()
-        raise BadRequestException("No se pudo restaurar el respaldo. Comprueba su formato y clave de cifrado.")
+@router.post('/preview')
+async def preview_backup(file: UploadFile = File(...), tenant_id: Optional[str] = Query(None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.backup_recovery_service import BackupRecoveryService, MAX_BYTES
+    company = resolve_backup_company(current_user, tenant_id)
+    content = await file.read(MAX_BYTES+1)
+    try: return BackupRecoveryService.preview(db, content, company, current_user)
+    except ValueError as exc: raise BadRequestException(str(exc))
+
+
+@router.post('/restore', response_model=BackupRestoreResponse)
+async def restore_backup(file: UploadFile = File(...), password: str = Form(...), review_token: str = Form(...), tenant_id: Optional[str] = Query(None), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.backup_recovery_service import BackupRecoveryService, MAX_BYTES
+    company = resolve_backup_company(current_user, tenant_id)
+    content = await file.read(MAX_BYTES+1)
+    try: return BackupRecoveryService.restore(db, content, company, current_user, review_token, password)
+    except ValueError as exc: raise BadRequestException(str(exc))

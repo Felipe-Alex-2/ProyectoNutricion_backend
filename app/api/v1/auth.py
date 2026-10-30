@@ -49,20 +49,6 @@ from app.models.activity_log import ActivityLog
 def login(request: LoginRequest, req: Request, db: Session = Depends(get_db)):
     user = AuthService.authenticate(db, request)
     tokens = AuthService.create_tokens_for_user(user)
-    try:
-        ip = req.client.host if req.client else None
-        db.add(ActivityLog(
-            user_id=user.id,
-            user_email=user.email,
-            user_name=user.full_name,
-            action="LOGIN",
-            description=f"Inicio de sesión exitoso en la plataforma web",
-            category="AUTH",
-            ip_address=ip
-        ))
-        db.commit()
-    except Exception:
-        pass
     return tokens
 
 
@@ -149,35 +135,5 @@ def verify_developer_key(
         is_valid = verify_password(key_to_test, current_user.hashed_password)
 
     if not is_valid:
-        # Registrar intento fallido en bitácora
-        try:
-            db.add(ActivityLog(
-                user_id=current_user.id,
-                user_email=current_user.email,
-                user_name=current_user.full_name,
-                action="INTENTO_LLAVE_BITACORA_FALLIDO",
-                description="Intento fallido de desbloqueo de bitácora confidencial.",
-                category="SECURITY",
-            ))
-            db.commit()
-        except Exception:
-            pass
         return DeveloperKeyVerifyResponse(valid=False, message="La llave o contraseña de administrador es incorrecta.")
-
-    # Registrar desbloqueo exitoso
-    try:
-        db.add(ActivityLog(
-            user_id=current_user.id,
-            user_email=current_user.email,
-            user_name=current_user.full_name,
-            action="BITACORA_DESBLOQUEADA",
-            description="El usuario autenticó su llave y desbloqueó el módulo de auditoría/bitácora.",
-            category="SECURITY",
-        ))
-        db.commit()
-    except Exception:
-        pass
-
     return DeveloperKeyVerifyResponse(valid=True, message="Acceso autorizado a la bitácora confidencial.")
-
-

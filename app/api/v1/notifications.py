@@ -19,14 +19,14 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 @router.get("", response_model=List[NotificationOut])
 def get_my_notifications(
     limit: int = Query(50, ge=1, le=100),
-    tenant_id: Optional[str] = Query(None, description="Filtrar por organización (ADMIN_SAAS)"),
+    tenant_id: Optional[str] = Query(None, description="Filtrar por organización (SUPERADMIN)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Obtiene el listado de notificaciones para el usuario en sesión.
     """
-    effective_tenant = tenant_id if current_user.role_id == "ADMIN_SAAS" else current_user.tenant_id
+    effective_tenant = tenant_id if current_user.role_id == "SUPERADMIN" else current_user.tenant_id
     return NotificationService.get_user_notifications(db=db, user_id=current_user.id, limit=limit, tenant_id=effective_tenant)
 
 
@@ -50,9 +50,9 @@ def send_notification(
 ):
     """
     Envía una notificación a un usuario (ej. seguimiento de dieta, cita, etc.).
-    Si el emisor no es ADMIN_SAAS, valida que el destinatario pertenezca a su misma clínica.
+    Si el emisor no es SUPERADMIN, valida que el destinatario pertenezca a su misma clínica.
     """
-    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+    if current_user.role_id != "SUPERADMIN" and current_user.tenant_id:
         target_user = db.query(User).filter(User.id == payload.user_id).first()
         if not target_user:
             raise HTTPException(status_code=404, detail="Usuario destinatario no encontrado.")
@@ -80,14 +80,14 @@ def broadcast_tenant_notifications(
     Envía una notificación a todos los pacientes (o grupo seleccionado) del tenant.
     Aparecerá en el Centro de Notificaciones de la aplicación móvil de los clientes.
     """
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tienes permisos para emitir notificaciones a pacientes.",
         )
 
     q = db.query(User).filter(User.role_id == "CLIENTE", User.is_active == True)
-    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+    if current_user.role_id != "SUPERADMIN" and current_user.tenant_id:
         q = q.filter(User.tenant_id == current_user.tenant_id)
 
     if payload.patient_ids and len(payload.patient_ids) > 0:

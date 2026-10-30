@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class PaymentCreate(BaseModel):
+    branch_id: Optional[str] = None
     tenant_id: str = Field(..., description="ID de la sucursal u organización")
     customer_name: str = Field(..., min_length=2, description="Nombre del cliente o paciente")
     customer_email: Optional[str] = Field(None, description="Correo electrónico del cliente")
@@ -19,6 +20,7 @@ class PaymentCaptureRequest(BaseModel):
 
 
 class PaymentOut(BaseModel):
+    branch_id: Optional[str] = None
     id: str
     tenant_id: str
     tenant_name: Optional[str] = None

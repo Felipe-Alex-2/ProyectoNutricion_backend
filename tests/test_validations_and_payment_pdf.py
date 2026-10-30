@@ -8,7 +8,7 @@ from app.core.security import hash_password, create_access_token
 
 @pytest.fixture
 def auth_context(db_session):
-    admin_role = Role(id="ADMIN_SAAS", name="Admin SaaS", description="Global", platform="Web")
+    admin_role = Role(id="SUPERADMIN", name="Admin SaaS", description="Global", platform="Web")
     db_session.add(admin_role)
     db_session.commit()
 
@@ -21,7 +21,7 @@ def auth_context(db_session):
         email="admin@testvalidations.com",
         hashed_password=hash_password("Password123!"),
         full_name="Admin Validador",
-        role_id="ADMIN_SAAS",
+        role_id="SUPERADMIN",
         tenant_id=tenant.id,
         is_active=True,
     )
@@ -36,7 +36,7 @@ def auth_context(db_session):
     }
 
 
-def test_tenant_validations(client, auth_context):
+def test_tenant_validations(client, auth_context, db_session):
     headers = auth_context["headers"]
 
     # 1. Intentar crear tenant con nombre vacio o espacios
@@ -48,12 +48,17 @@ def test_tenant_validations(client, auth_context):
     assert res_empty.status_code in [400, 422]
     assert "El campo no puede estar" in str(res_empty.json()) or "El nombre de la sucursal es obligatorio" in str(res_empty.json())
 
+    db_session.add(Role(id="ADMIN_ORGANIZATION", name="Administrador", description="Empresa", platform="Web"))
+    db_session.commit()
+    for identity in ["candidate1","candidate2"]:
+        db_session.add(User(id=identity,email=identity+"@example.com",full_name=identity,hashed_password=hash_password("Password123!"),role_id="ADMIN_ORGANIZATION"))
+    db_session.commit()
     # 2. Crear una sucursal valida
     tenant_name = "Clinica Validacion Test 2026"
     tenant_code = "VALTEST1"
     res_ok = client.post(
         "/api/v1/tenants",
-        json={"name": tenant_name, "code": tenant_code},
+        json={"name": tenant_name, "code": tenant_code,"administrator_id":"candidate1"},
         headers=headers,
     )
     assert res_ok.status_code == 201
@@ -61,7 +66,7 @@ def test_tenant_validations(client, auth_context):
     # 3. Intentar crear duplicado con el mismo nombre
     res_dup = client.post(
         "/api/v1/tenants",
-        json={"name": tenant_name, "code": "VALTEST2"},
+        json={"name": tenant_name, "code": "VALTEST2","administrator_id":"candidate2"},
         headers=headers,
     )
     assert res_dup.status_code == 409

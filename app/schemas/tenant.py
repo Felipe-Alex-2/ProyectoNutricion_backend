@@ -23,7 +23,15 @@ class TenantBase(BaseModel):
 
 
 class TenantCreate(TenantBase):
-    pass
+    administrator_id: Optional[str] = None
+    initial_branch_name: str = Field('Sucursal principal', min_length=2, max_length=250)
+    initial_branch_code: str = Field('PRINCIPAL', min_length=2, max_length=50)
+
+    @field_validator('initial_branch_name', 'initial_branch_code')
+    @classmethod
+    def nonblank_branch(cls, value):
+        if len(value.strip()) < 2: raise ValueError('La sucursal requiere nombre y código válidos.')
+        return value.strip()
 
 
 class TenantUpdate(BaseModel):
@@ -41,6 +49,7 @@ class TenantResponse(TenantBase):
     created_at: datetime
     updated_at: datetime
     users_count: Optional[int] = 0
+    administrator_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

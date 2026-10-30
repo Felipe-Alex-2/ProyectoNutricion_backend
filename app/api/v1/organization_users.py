@@ -35,8 +35,8 @@ def list_organization_users(
         if not current_user.tenant_id:
             return []
         query = query.filter(User.tenant_id == current_user.tenant_id)
-    elif current_user.role_id == "ADMIN_SAAS":
-        # Admin SaaS puede ver todos o filtrar por organización
+    elif current_user.role_id == "SUPERADMIN":
+        # Superadmin puede ver todos o filtrar por organización
         if tenant_id:
             query = query.filter(User.tenant_id == tenant_id)
     else:
@@ -46,7 +46,7 @@ def list_organization_users(
         else:
             query = query.filter(User.id == current_user.id)
 
-    if current_user.role_id not in {"ADMIN_SAAS", "ADMIN_ORGANIZATION"}:
+    if current_user.role_id not in {"SUPERADMIN", "ADMIN_ORGANIZATION"}:
         query = query.filter(User.id == current_user.id)
     if role_id:
         query = query.filter(User.role_id == role_id)
@@ -72,8 +72,8 @@ def create_organization_user(
         if not current_user.tenant_id:
             raise ForbiddenException("Tu cuenta no tiene una organización asignada.")
         target_tenant_id = current_user.tenant_id
-        if data.role_id == "ADMIN_SAAS":
-            raise ForbiddenException("No tienes autorización para asignar el rol de Administrador SaaS Global.")
+        if data.role_id == "SUPERADMIN":
+            raise ForbiddenException("No tienes autorización para asignar el rol de Superadministrador Global.")
 
     if data.role_id not in VALID_ROLES:
         raise BadRequestException("Rol inválido.")
@@ -134,8 +134,8 @@ def update_organization_user(
     if current_user.role_id == "ADMIN_ORGANIZATION":
         if user.tenant_id != current_user.tenant_id:
             raise ForbiddenException("No tienes permiso para gestionar usuarios de otra organización.")
-        if data.role_id == "ADMIN_SAAS":
-            raise ForbiddenException("No puedes ascender a un usuario a Administrador SaaS Global.")
+        if data.role_id == "SUPERADMIN":
+            raise ForbiddenException("No puedes ascender a un usuario a Superadministrador Global.")
         # No permitir mover a otra organización
         data.tenant_id = current_user.tenant_id
 
@@ -154,16 +154,25 @@ def update_organization_user(
         user.phone = data.phone.strip() if data.phone else None
     if data.role_id is not None:
         user.role_id = data.role_id
-    if data.tenant_id is not None and current_user.role_id == "ADMIN_SAAS":
+    if data.tenant_id is not None and current_user.role_id == "SUPERADMIN":
+        from app.models.company import Branch, CompanyAdministrator
+        if data.tenant_id != user.tenant_id:
+            if db.query(CompanyAdministrator).filter_by(user_id=user.id).first():
+                raise BadRequestException('El administrador responsable no puede trasladarse a otra empresa.')
+            target = db.get(Tenant, data.tenant_id)
+            if not target or not target.is_active: raise BadRequestException('La empresa no está disponible.')
+            branch = db.query(Branch).filter_by(tenant_id=target.id,is_active=True).first()
+            user.branch_id = branch.id if branch else None
+            user.session_version = (user.session_version or 0) + 1
         user.tenant_id = data.tenant_id
     if data.is_active is not None:
         user.is_active = data.is_active
 
-    # Modificación de contraseña: Solo Administrador SaaS Global
+    # Modificación de contraseña: Solo Superadministrador Global
     if data.password:
-        if current_user.role_id != "ADMIN_SAAS":
+        if current_user.role_id != "SUPERADMIN":
             raise ForbiddenException(
-                "Solo el Administrador SaaS (Admin Global) tiene permisos para modificar contraseñas de usuarios."
+                "Solo el Superadministrador (Admin Global) tiene permisos para modificar contraseñas de usuarios."
             )
         user.hashed_password = get_password_hash(data.password)
         user.session_version = (user.session_version or 0) + 1

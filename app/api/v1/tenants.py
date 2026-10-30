@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.models.tenant import Tenant
 from app.core.authorization import require_role, require_tenant
+from app.schemas.user import UserCreate
 from app.schemas.tenant import TenantCreate, TenantUpdate, TenantResponse
 from app.services.tenant_service import TenantService
 
@@ -17,17 +19,34 @@ def list_tenants(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         return [TenantService.get_by_id(db, current_user.tenant_id)] if current_user.tenant_id else []
     return TenantService.get_all(db, active_only=active_only)
 
 
-@router.get("/public", response_model=List[TenantResponse])
+@router.get("/public")
 def list_public_tenants(
     db: Session = Depends(get_db),
 ):
     """Retorna las sucursales/clínicas activas disponibles públicamente para el registro de clientes."""
-    return TenantService.get_all(db, active_only=True)
+    return [{"id":t.id,"name":t.name,"code":t.code} for t in db.query(Tenant).filter_by(is_active=True).all()]
+
+
+@router.get('/administrator-candidates')
+def administrator_candidates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_role(current_user, {'SUPERADMIN'})
+    return [{'id':u.id,'full_name':u.full_name,'email':u.email} for u in db.query(User).filter(User.role_id == 'ADMIN_ORGANIZATION', User.tenant_id.is_(None), User.is_active.is_(True)).all()]
+
+
+@router.post('/administrator-candidates', status_code=201)
+def create_administrator_candidate(data: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.services.user_service import UserService
+    from app.core.exceptions import ConflictException
+    require_role(current_user, {'SUPERADMIN'})
+    if UserService.get_by_email(db, str(data.email).lower()): raise ConflictException('El correo ya está registrado.')
+    data.tenant_id = None
+    account = UserService.create(db, data, role_id='ADMIN_ORGANIZATION')
+    return {'id':account.id, 'full_name':account.full_name, 'email':account.email}
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
@@ -46,7 +65,7 @@ def create_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_role(current_user, {"ADMIN_SAAS"})
+    require_role(current_user, {"SUPERADMIN"})
     return TenantService.create(db, data)
 
 
@@ -57,7 +76,7 @@ def update_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_role(current_user, {"ADMIN_SAAS"})
+    require_role(current_user, {"SUPERADMIN"})
     return TenantService.update(db, tenant_id, data)
 
 
@@ -67,7 +86,7 @@ def toggle_tenant_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_role(current_user, {"ADMIN_SAAS"})
+    require_role(current_user, {"SUPERADMIN"})
     return TenantService.toggle_status(db, tenant_id)
 
 
@@ -77,6 +96,6 @@ def delete_tenant(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_role(current_user, {"ADMIN_SAAS"})
+    require_role(current_user, {"SUPERADMIN"})
     TenantService.delete(db, tenant_id)
     return None

@@ -73,14 +73,14 @@ def list_payments(
     current_user: User = Depends(get_current_user),
 ):
     require_role(current_user, STAFF_ROLES)
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         require_tenant(current_user, current_user.tenant_id)
     """
     Lista el historial de cobros realizados en la sucursal seleccionada o general.
     """
     # Si el usuario es ADMIN_ORGANIZATION o NUTRICIONISTA y tiene tenant_id, filtrar por defecto si no es SAAS
     effective_tenant_id = tenant_id
-    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+    if current_user.role_id != "SUPERADMIN" and current_user.tenant_id:
         effective_tenant_id = current_user.tenant_id
 
     return PaymentService.list_payments(
@@ -97,13 +97,13 @@ def get_payment_stats(
     current_user: User = Depends(get_current_user),
 ):
     require_role(current_user, STAFF_ROLES)
-    if current_user.role_id != "ADMIN_SAAS":
+    if current_user.role_id != "SUPERADMIN":
         require_tenant(current_user, current_user.tenant_id)
     """
     Retorna métricas de caja (total recaudado, cobros completados y pendientes).
     """
     effective_tenant_id = tenant_id
-    if current_user.role_id != "ADMIN_SAAS" and current_user.tenant_id:
+    if current_user.role_id != "SUPERADMIN" and current_user.tenant_id:
         effective_tenant_id = current_user.tenant_id
 
     return PaymentService.get_payment_stats(

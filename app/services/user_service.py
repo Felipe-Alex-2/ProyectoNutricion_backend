@@ -29,6 +29,7 @@ class UserService:
             hashed_password=get_password_hash(obj_in.password),
             full_name=obj_in.full_name.strip(),
             phone=phone_val.strip() if phone_val else None,
+            branch_id=getattr(obj_in, "branch_id", None),
             role_id=role_id or obj_role or "CLIENTE",
             tenant_id=tenant_id_val,
             is_active=True,

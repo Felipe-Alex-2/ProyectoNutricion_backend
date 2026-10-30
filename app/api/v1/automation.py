@@ -27,7 +27,7 @@ def trigger_appointment_reminders(
     db: Session = Depends(get_db),
 ):
     """Ejecuta la revisión y envío de recordatorios de citas próximas en 1 hora."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a tareas de sistema.")
 
     return AutomationService.check_appointment_reminders(db)
@@ -39,7 +39,7 @@ def trigger_weekly_habits_evaluation(
     db: Session = Depends(get_db),
 ):
     """Ejecuta la evaluación semanal de hábitos para todos los pacientes y genera notificaciones."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a tareas de sistema.")
 
     return AutomationService.run_weekly_habits_evaluation(db)
@@ -51,7 +51,7 @@ def trigger_nutritionist_summary(
     db: Session = Depends(get_db),
 ):
     """Genera y envía el resumen semanal de pacientes asignados a los nutricionistas."""
-    if current_user.role_id not in ["ADMIN_SAAS", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado a tareas de sistema.")
 
     nutri_id = current_user.id if current_user.role_id == "NUTRICIONISTA" else None
