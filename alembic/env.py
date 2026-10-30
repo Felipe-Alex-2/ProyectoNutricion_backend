@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.config import settings
-from app.database import Base
+from app.database import Base, _resolve_db_url
 import app.models  # load all models
 
 # this is the Alembic Config object, which provides
@@ -17,7 +17,7 @@ import app.models  # load all models
 config = context.config
 
 # Overwrite sqlalchemy.url with the app's settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", _resolve_db_url().replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

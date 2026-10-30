@@ -43,3 +43,34 @@ def test_legacy_schema_adds_session_version_without_promoting_patient(tmp_path):
         user = connection.execute(text("SELECT role_id,tenant_id,session_version FROM users WHERE id='old'")).one()
         assert tuple(user) == ('CLIENTE', None, 0)
     engine.dispose()
+
+
+import pytest
+
+@pytest.mark.parametrize('scheme', ['postgres', 'postgresql', 'postgresql+psycopg', 'postgresql+psycopg2'])
+def test_migrations_use_the_installed_postgresql_driver(monkeypatch, scheme):
+    """Alembic and the API must both use psycopg2 without contacting a server."""
+    import runpy
+    from contextlib import nullcontext
+    from alembic import context
+    from alembic.config import Config
+    from app.config import settings
+    from app.database import _resolve_db_url
+    from sqlalchemy.engine import make_url
+    monkeypatch.setattr(settings, 'DATABASE_URL', scheme+'://test:p%40ss@db.invalid:5432/demo?sslmode=require')
+    api_url = _resolve_db_url()
+    recorded = {}
+    monkeypatch.setattr(context, 'config', Config(), raising=False)
+    monkeypatch.setattr(context, 'is_offline_mode', lambda: True)
+    monkeypatch.setattr(context, 'configure', lambda **kw: recorded.update(kw))
+    monkeypatch.setattr(context, 'begin_transaction', nullcontext)
+    monkeypatch.setattr(context, 'run_migrations', lambda: None)
+    runpy.run_path(str(Path(__file__).resolve().parents[1] / 'alembic' / 'env.py'))
+    assert recorded['url'] == api_url
+    parsed = make_url(api_url)
+    assert parsed.drivername == 'postgresql+psycopg2'
+    assert parsed.password == 'p@ss'
+    assert parsed.query['sslmode'] == 'require'
+    engine = create_engine(api_url)
+    assert engine.dialect.driver == 'psycopg2'
+    engine.dispose()

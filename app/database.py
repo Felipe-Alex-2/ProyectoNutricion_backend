@@ -41,6 +41,9 @@ def _resolve_db_url() -> str:
     elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
+    elif db_url.startswith("postgresql+psycopg://"):
+        db_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
+
     return db_url
 
 
