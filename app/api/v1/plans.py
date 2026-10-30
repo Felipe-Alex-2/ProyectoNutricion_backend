@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.core.authorization import require_patient_access
+from app.core.authorization import require_patient_access, require_role, STAFF_ROLES
 from app.models.ai_nutrition import NutritionalPlan
 from app.services.ai_plan_service import AIPlanService
 from app.schemas.ai_nutrition import (
@@ -24,22 +24,15 @@ def generate_plan_draft(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_patient_access(db, current_user, data.patient_id, allow_self=True)
-    """
-    Genera un borrador de plan nutricional determinístico + IA (Mifflin-St Jeor + Gemini + filtro de exclusiones).
-    Accesible para nutricionistas, admins y el propio paciente.
-    """
-    # Si es paciente, solo puede solicitar para sí mismo
-    if current_user.role_id in ["CLIENTE", "PACIENTE"] and current_user.id != data.patient_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puedes generar planes para otro usuario.")
-
-    nutritionist_id = current_user.id if current_user.role_id in ["NUTRICIONISTA", "ADMIN_ORGANIZATION", "SUPERADMIN"] else None
+    """Genera un borrador con IA para revisión y asignación profesional."""
+    require_role(current_user, STAFF_ROLES)
+    require_patient_access(db, current_user, data.patient_id)
 
     try:
         plan = AIPlanService.generate_plan_draft(
             db=db,
             patient_id=data.patient_id,
-            nutritionist_id=nutritionist_id,
+            nutritionist_id=current_user.id,
             custom_goal=data.custom_goal,
             calorie_adjustment_pct=data.calorie_adjustment_pct,
             meals_per_day=data.meals_per_day or 4,
@@ -47,8 +40,8 @@ def generate_plan_draft(
         return plan
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error generando plan: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No se pudo generar el plan. Intenta nuevamente en unos momentos.")
 
 
 @router.put("/{plan_id}", response_model=NutritionalPlanResponse)
@@ -78,10 +71,11 @@ def update_plan(
             meals=data.meals,
             clinical_notes=data.clinical_notes,
             status=data.status,
+            approved_by=current_user.id,
         )
         return plan
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/{plan_id}/approve", response_model=NutritionalPlanResponse)
@@ -102,7 +96,7 @@ def approve_plan(
         plan = AIPlanService.approve_plan(db=db, plan_id=plan_id, nutritionist_id=current_user.id)
         return plan
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/patient/{patient_id}", response_model=List[NutritionalPlanResponse])
@@ -116,12 +110,10 @@ def get_patient_plans(
     if current_user.role_id in ["CLIENTE", "PACIENTE"] and current_user.id != patient_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado.")
 
-    plans = (
-        db.query(NutritionalPlan)
-        .filter(NutritionalPlan.patient_id == patient_id)
-        .order_by(NutritionalPlan.created_at.desc())
-        .all()
-    )
+    query = db.query(NutritionalPlan).filter(NutritionalPlan.patient_id == patient_id)
+    if current_user.role_id not in STAFF_ROLES:
+        query = query.filter(NutritionalPlan.status == 'APPROVED')
+    plans = query.order_by(NutritionalPlan.created_at.desc()).all()
     return [AIPlanService._format_plan_response(p) for p in plans]
 
 
@@ -130,21 +122,13 @@ def get_my_active_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """El paciente consulta su plan aprobado vigente (o borrador en caso de no tener aprobado aún)."""
+    """El paciente consulta únicamente su plan aprobado vigente."""
     plan = (
         db.query(NutritionalPlan)
         .filter(NutritionalPlan.patient_id == current_user.id, NutritionalPlan.status == "APPROVED")
         .order_by(NutritionalPlan.approved_at.desc())
         .first()
     )
-
-    if not plan:
-        plan = (
-            db.query(NutritionalPlan)
-            .filter(NutritionalPlan.patient_id == current_user.id)
-            .order_by(NutritionalPlan.created_at.desc())
-            .first()
-        )
 
     if not plan:
         return None

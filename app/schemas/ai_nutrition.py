@@ -1,6 +1,7 @@
-from datetime import datetime
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Literal
+from uuid import UUID
+from pydantic import BaseModel, Field, ConfigDict, AwareDatetime
 
 
 # =====================================================================
@@ -10,10 +11,10 @@ from pydantic import BaseModel, Field, ConfigDict
 class FoodItem(BaseModel):
     name: str
     portion: str
-    calories: float = 0.0
-    protein_g: float = 0.0
-    carbs_g: float = 0.0
-    fats_g: float = 0.0
+    calories: float = Field(0, ge=0, le=10000, allow_inf_nan=False)
+    protein_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
+    carbs_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
+    fats_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
 
 
 class MealItem(BaseModel):
@@ -38,22 +39,22 @@ class NutritionalPlanCreate(BaseModel):
 
 
 class NutritionalPlanUpdate(BaseModel):
-    title: Optional[str] = None
-    daily_calories: Optional[float] = None
-    protein_g: Optional[float] = None
-    carbs_g: Optional[float] = None
-    fats_g: Optional[float] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    daily_calories: Optional[float] = Field(None, gt=0, le=10000, allow_inf_nan=False)
+    protein_g: Optional[float] = Field(None, ge=0, le=1000, allow_inf_nan=False)
+    carbs_g: Optional[float] = Field(None, ge=0, le=1000, allow_inf_nan=False)
+    fats_g: Optional[float] = Field(None, ge=0, le=1000, allow_inf_nan=False)
     meals_per_day: Optional[int] = None
     meals: Optional[List[MealItem]] = None
     clinical_notes: Optional[str] = None
-    status: Optional[str] = None  # DRAFT, APPROVED, REJECTED
+    status: Optional[Literal['DRAFT', 'APPROVED', 'REJECTED']] = None
 
 
 class PlanGenerateRequest(BaseModel):
     patient_id: str
-    custom_goal: Optional[str] = None
-    calorie_adjustment_pct: Optional[float] = None  # e.g. -15.0 or 10.0
-    meals_per_day: Optional[int] = 4
+    custom_goal: Optional[str] = Field(None, min_length=1, max_length=100)
+    calorie_adjustment_pct: Optional[float] = Field(None, ge=-30, le=30, allow_inf_nan=False)
+    meals_per_day: int = Field(4, ge=1, le=8)
     include_ai_reasoning: bool = True
 
 
@@ -181,6 +182,19 @@ class FoodRecordResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FoodRecordCreate(BaseModel):
+    """Client UUID is retained across offline retries; ownership comes from JWT."""
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+    client_record_id: UUID
+    description: str = Field(min_length=1, max_length=500)
+    meal_type: Literal['Desayuno', 'Almuerzo', 'Merienda', 'Cena', 'Snack']
+    consumed_at: AwareDatetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    calories: float = Field(0, ge=0, le=10000, allow_inf_nan=False)
+    protein_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
+    carbs_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
+    fats_g: float = Field(0, ge=0, le=1000, allow_inf_nan=False)
 
 
 # =====================================================================
