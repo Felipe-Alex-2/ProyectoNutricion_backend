@@ -190,8 +190,11 @@ class AIPlanService:
         if not plan:
             raise ValueError("Plan nutricional no encontrado.")
 
-        # Desactivar planes anteriores aprobados para el mismo paciente
+        # Serialize assignment per patient so concurrent approvals cannot leave two active plans.
+        db.query(User).filter(User.id == plan.patient_id).with_for_update().one()
+        db.refresh(plan)
         if plan.status == 'APPROVED':
+            db.commit()
             return cls._format_plan_response(plan)
         if not nutritionist_id:
             raise ValueError('La aprobación requiere un profesional responsable.')
