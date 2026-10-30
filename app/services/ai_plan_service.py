@@ -192,6 +192,7 @@ class AIPlanService:
 
         # Serialize assignment per patient so concurrent approvals cannot leave two active plans.
         db.query(User).filter(User.id == plan.patient_id).with_for_update().one()
+        db.flush()
         db.refresh(plan)
         if plan.status == 'APPROVED':
             db.commit()

@@ -81,6 +81,11 @@ def test_patient_sees_approved_plan_only(client, db_session, accounts):
     assert client.put('/api/v1/plans/next', headers=headers('org'), json={'status': 'APPROVED'}).status_code == 200
     assert db_session.get(NutritionalPlan, 'draft').status == 'ARCHIVED'
     assert client.get('/api/v1/plans/my-plan', headers=headers('patient')).json()['id'] == 'next'
+    db_session.autoflush = False
+    updated = client.put('/api/v1/plans/next', headers=headers('org'), json={'title': 'Plan ajustado', 'status': 'APPROVED'})
+    assert updated.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(NutritionalPlan, 'next').title == 'Plan ajustado'
 
 
 def test_photo_rejects_fake_image_and_cross_clinic_before_ai(client, accounts, monkeypatch):
