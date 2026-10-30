@@ -33,6 +33,19 @@ def unique_object(pairs):
 
 class BackupRecoveryService:
     @staticmethod
+    def validate_workspace(db, snapshot):
+        from app.core.workspace import current
+        scope = current(db)
+        if not scope or not scope.tenant_id: return
+        if snapshot['tenant_id'] != scope.tenant_id: raise ValueError('El respaldo pertenece a otra empresa.')
+        if scope.branch_id:
+            if snapshot.get('branch_id') != scope.branch_id:
+                raise ValueError('Selecciona un respaldo de la sucursal activa. Los respaldos de empresa se recuperan desde la vista de empresa del superadmin.')
+            for rows in snapshot['tables'].values():
+                if any(row.get('branch_id') != scope.branch_id for row in rows):
+                    raise ValueError('El respaldo mezcla sucursales o contiene registros sin sucursal.')
+
+    @staticmethod
     def parse(content, tenant_id):
         from app.services.backup_service import BackupService
         if isinstance(content, bytes):
@@ -149,8 +162,10 @@ class BackupRecoveryService:
 
     @classmethod
     def preview(cls, db, content, tenant_id, actor):
-        snapshot = cls.parse(content, tenant_id); plan = cls.build_plan(db, snapshot)
-        claims = {'kind': 'backup_review', 'sub': actor.id, 'tenant_id': tenant_id, 'file_hash': digest(snapshot), 'plan_hash': digest(plan), 'exp': datetime.now(timezone.utc) + timedelta(minutes=15)}
+        snapshot = cls.parse(content, tenant_id); cls.validate_workspace(db, snapshot); plan = cls.build_plan(db, snapshot)
+        from app.core.workspace import current
+        scope = current(db)
+        claims = {'kind': 'backup_review', 'sub': actor.id, 'tenant_id': tenant_id, 'branch_id':scope.branch_id if scope else None, 'file_hash': digest(snapshot), 'plan_hash': digest(plan), 'exp': datetime.now(timezone.utc) + timedelta(minutes=15)}
         return {k:v for k,v in plan.items() if k != 'operations'} | {'tenant_id': tenant_id, 'created_at': snapshot['created_at'], 'review_token': jwt.encode(claims, settings.SECRET_KEY, algorithm=settings.ALGORITHM)}
 
     @classmethod
@@ -164,7 +179,10 @@ class BackupRecoveryService:
         except JWTError as exc: raise ConflictException('La revisión venció. Analiza el archivo otra vez.') from exc
         from app.models.tenant import Tenant
         db.execute(select(Tenant).where(Tenant.id == tenant_id).with_for_update()).scalar_one()
-        snapshot = cls.parse(content, tenant_id); plan = cls.build_plan(db, snapshot)
+        snapshot = cls.parse(content, tenant_id); cls.validate_workspace(db, snapshot); plan = cls.build_plan(db, snapshot)
+        from app.core.workspace import current
+        scope = current(db)
+        if claims.get('branch_id') != (scope.branch_id if scope else None): raise ConflictException('La sucursal activa cambió. Analiza el respaldo otra vez.')
         if claims.get('kind') != 'backup_review' or claims.get('sub') != actor.id or claims.get('tenant_id') != tenant_id or claims.get('file_hash') != digest(snapshot) or claims.get('plan_hash') != digest(plan): raise ConflictException('El archivo o los datos cambiaron. Analiza el respaldo otra vez.')
         restored = 0; names = set()
         try:

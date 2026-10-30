@@ -29,7 +29,7 @@ class GeneratedReportService:
 
     @staticmethod
     def get(db, actor, report_id):
-        row = db.get(GeneratedReport, report_id)
+        row = db.query(GeneratedReport).filter(GeneratedReport.id == report_id).first()
         if not row: raise NotFoundException('Reporte no encontrado.')
         require_tenant(actor, row.tenant_id)
         if actor.role_id == 'NUTRICIONISTA' and row.created_by != actor.id: raise ForbiddenException('El reporte pertenece a otro especialista.')

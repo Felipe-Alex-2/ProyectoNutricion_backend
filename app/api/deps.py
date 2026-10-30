@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -13,10 +13,12 @@ security_bearer = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Dependency to retrieve authenticated user from a Bearer JWT header."""
+    """Authenticate before binding the request's validated workspace."""
+    db.info.pop('workspace', None)
     token = credentials.credentials if credentials else None
     if not token:
         raise AuthException(detail="Authentication credentials were not provided")
@@ -45,8 +47,25 @@ def get_current_user(
     if not user.is_active:
         raise AuthException(detail="User account is inactive")
 
+    user._workspace_company_id = None
+    user._workspace_branch_id = None
     db.info['audit_actor'] = user
-    return user
+    from app.core.workspace import selection
+    administrative = ('/api/v1/tenants', '/api/v1/branches', '/api/v1/roles')
+    context_path = request.url.path in {'/api/v1/users/me', '/api/v1/users/me/workspace', '/api/v1/users/me/workspace-options', '/api/v1/auth/logout'}
+    try:
+        if not context_path and not any(request.url.path.startswith(p) for p in administrative):
+            explicit = 'x-workspace-company' in request.headers or 'x-workspace-branch' in request.headers
+            company = request.headers.get('x-workspace-company')
+            branch = request.headers.get('x-workspace-branch')
+            scope = selection(db, user, None if company == 'all' else company, None if branch == 'all' else branch, explicit=explicit)
+            db.info['workspace'] = scope
+            user._workspace_company_id = scope.tenant_id
+            user._workspace_branch_id = scope.branch_id
+        yield user
+    finally:
+        db.info.pop('workspace', None)
+        db.info.pop('audit_actor', None)
 
 
 def get_current_user_optional(

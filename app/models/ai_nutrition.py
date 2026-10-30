@@ -1,3 +1,4 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
@@ -83,7 +84,7 @@ class AutomationConfig(Base):
     description = Column(String(200), nullable=True)
 
 
-class NutritionalPlan(Base):
+class NutritionalPlan(WorkspaceOwned, Base):
     """Plan nutricional generado (borrador IA o aprobado por nutricionista)."""
     __tablename__ = "nutritional_plans"
 
@@ -121,7 +122,7 @@ class NutritionalPlan(Base):
     tenant = relationship("Tenant")
 
 
-class ChatMessage(Base):
+class ChatMessage(WorkspaceOwned, Base):
     """Historial de mensajes con el asistente nutricional 'Carlitos'."""
     __tablename__ = "chat_messages"
 
@@ -134,7 +135,7 @@ class ChatMessage(Base):
     patient = relationship("User", foreign_keys=[patient_id])
 
 
-class FoodRecord(Base):
+class FoodRecord(WorkspaceOwned, Base):
     """Registro y análisis por visión artificial de comidas del paciente."""
     __tablename__ = "food_records"
 

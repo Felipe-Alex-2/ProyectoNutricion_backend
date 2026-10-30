@@ -100,14 +100,14 @@ def test_completed_appointments_and_saved_reports_in_backup(client,db_session,co
     assert client.post('/api/v1/appointments/done/confirm',headers=headers('admin')).status_code==400
     saved=client.post('/api/v1/reports/saved',headers=headers('admin'),json={'entity':'payments','columns':[]});assert saved.status_code==201,saved.text
     identity=saved.json()['id']
-    assert client.get('/api/v1/reports/saved/'+identity,headers=headers('adminb')).status_code==403
+    assert client.get('/api/v1/reports/saved/'+identity,headers=headers('adminb')).status_code in (403,404)
     snap=BackupRecoveryService.parse(backup(db_session),'a')
     assert [r['id'] for r in snap['tables']['appointments']]==['done']
     assert [r['id'] for r in snap['tables']['generated_reports']]==[identity]
 
 def test_create_company_assign_admin_branches_and_register(client,db_session,context):
     candidate=client.post('/api/v1/tenants/administrator-candidates',headers=headers('root'),json={'full_name':'New Admin','email':'new@example.com','password':'Password123!'});assert candidate.status_code==201,candidate.text
-    body={'name':'New Company','code':'NEW','administrator_id':candidate.json()['id'],'initial_branch_name':'Centro'}
+    body={'name':'New Company','code':'NEW','administrator_id':candidate.json()['id'],'initial_branch_name':'Centro','department_code':'01','initial_province_code':'0101','initial_municipality_code':'010101'}
     assert client.post('/api/v1/tenants',headers=headers('admin'),json=body).status_code==403
     created=client.post('/api/v1/tenants',headers=headers('root'),json=body);assert created.status_code==201,created.text
     company=created.json()['id'];user=db_session.get(User,candidate.json()['id']);assert user.tenant_id==company and user.branch_id

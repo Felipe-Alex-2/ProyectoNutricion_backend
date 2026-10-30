@@ -1,3 +1,4 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text
@@ -12,7 +13,7 @@ def bolivia_now():
     return datetime.now(BOLIVIA_TZ)
 
 
-class ActivityLog(Base):
+class ActivityLog(WorkspaceOwned, Base):
     __tablename__ = "activity_logs"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)

@@ -1,3 +1,4 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
@@ -5,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class Appointment(Base):
+class Appointment(WorkspaceOwned, Base):
     __tablename__ = "appointments"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)

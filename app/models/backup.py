@@ -1,10 +1,11 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from app.database import Base
 
 
-class BackupSetting(Base):
+class BackupSetting(WorkspaceOwned, Base):
     __tablename__ = "backup_settings"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -21,7 +22,7 @@ class BackupSetting(Base):
     )
 
 
-class BackupLog(Base):
+class BackupLog(WorkspaceOwned, Base):
     __tablename__ = "backup_logs"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

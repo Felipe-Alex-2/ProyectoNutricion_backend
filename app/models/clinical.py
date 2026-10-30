@@ -1,3 +1,4 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
@@ -5,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class PatientAnamnesis(Base):
+class PatientAnamnesis(WorkspaceOwned, Base):
     __tablename__ = "patient_anamnesis"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
@@ -59,7 +60,7 @@ class PatientAnamnesis(Base):
     tenant = relationship("Tenant")
 
 
-class ClinicalRecord(Base):
+class ClinicalRecord(WorkspaceOwned, Base):
     __tablename__ = "clinical_records"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)

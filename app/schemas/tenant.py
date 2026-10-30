@@ -9,6 +9,7 @@ class TenantBase(BaseModel):
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico de contacto")
     address: Optional[str] = Field(None, max_length=255, description="Dirección física")
+    department_code: Optional[str] = Field(None, min_length=2, max_length=2)
     logo_url: Optional[str] = Field(None, max_length=500, description="URL del logotipo")
     description: Optional[str] = Field(None, max_length=500, description="Descripción de la clínica")
     is_active: bool = Field(True, description="Estado activo de la organización")
@@ -23,6 +24,8 @@ class TenantBase(BaseModel):
 
 
 class TenantCreate(TenantBase):
+    initial_province_code: Optional[str] = Field(None, min_length=4, max_length=4)
+    initial_municipality_code: Optional[str] = Field(None, min_length=6, max_length=6)
     administrator_id: Optional[str] = None
     initial_branch_name: str = Field('Sucursal principal', min_length=2, max_length=250)
     initial_branch_code: str = Field('PRINCIPAL', min_length=2, max_length=50)
@@ -35,6 +38,7 @@ class TenantCreate(TenantBase):
 
 
 class TenantUpdate(BaseModel):
+    department_code: Optional[str] = Field(None, min_length=2, max_length=2)
     name: Optional[str] = Field(None, min_length=2, max_length=250, description="Nombre de la clínica")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico")

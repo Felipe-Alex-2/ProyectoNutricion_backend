@@ -125,6 +125,7 @@ class UserService:
                 "phone": p.phone,
                 "is_active": p.is_active,
                 "tenant_id": p.tenant_id,
+                "branch_id": p.branch_id,
                 "created_at": p.created_at,
                 "updated_at": p.updated_at,
                 "linked_status": link.status if link else "UNLINKED",

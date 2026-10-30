@@ -193,7 +193,7 @@ class ReportService:
                 row['patient_name']=person_name(getattr(item,'patient_id',None));row['nutritionist_name']=person_name(getattr(item,'nutritionist_id',None))
             related_id=getattr(item,'patient_id',None) or getattr(item,'created_by',None) or getattr(item,'user_id',None)
             owner=people.get(related_id)
-            branch_id=getattr(item,'branch_id',None) if model in (User,Payment,Appointment) else owner.branch_id if owner else None
+            branch_id=getattr(item,'branch_id',None)
             row.update(company_name=names.get(item.tenant_id,'Sin empresa'),branch_name=branch_names.get(branch_id,'Sin sucursal asignada'))
             rows.append({key:row.get(key,'') for key in selected})
         notes=['Datos limitados a las empresas, sucursales y pacientes autorizados.']

@@ -6,6 +6,7 @@ from app.models.company import Branch, CompanyAdministrator
 from app.core.exceptions import BadRequestException
 from app.models.user import User
 from app.schemas.tenant import TenantCreate, TenantUpdate
+from app.services.bolivia_locations import validate_department, validate_location
 from app.core.exceptions import ConflictException, NotFoundException
 
 
@@ -42,6 +43,7 @@ class TenantService:
             raise BadRequestException('Selecciona una cuenta activa con rol Administrador.')
         if administrator.tenant_id or db.query(CompanyAdministrator).filter_by(user_id=administrator.id).first():
             raise BadRequestException('La cuenta administradora ya pertenece a una empresa.')
+        validate_location(data.department_code, data.initial_province_code, data.initial_municipality_code)
         # Validacion 1: Campos vacios
         clean_name = data.name.strip() if data.name else ""
         clean_code = data.code.strip().upper() if data.code else ""
@@ -67,10 +69,11 @@ class TenantService:
             logo_url=data.logo_url.strip() if data.logo_url else None,
             description=data.description.strip() if data.description else None,
             is_active=data.is_active,
+            department_code=data.department_code,
         )
         db.add(tenant)
         db.flush()
-        branch = Branch(tenant_id=tenant.id, name=data.initial_branch_name.strip(), code=data.initial_branch_code.strip().upper(), address=data.address)
+        branch = Branch(tenant_id=tenant.id, name=data.initial_branch_name.strip(), code=data.initial_branch_code.strip().upper(), address=data.address, province_code=data.initial_province_code, municipality_code=data.initial_municipality_code)
         db.add(branch); db.flush()
         administrator.tenant_id = tenant.id; administrator.branch_id = branch.id
         administrator.session_version = (administrator.session_version or 0) + 1
@@ -85,6 +88,13 @@ class TenantService:
     def update(db: Session, tenant_id: str, data: TenantUpdate) -> Tenant:
         tenant = TenantService.get_by_id(db, tenant_id)
         update_data = data.model_dump(exclude_unset=True)
+        if 'department_code' in update_data:
+            code = update_data['department_code']
+            validate_department(code)
+            if code != tenant.department_code:
+                for branch in db.query(Branch).filter_by(tenant_id=tenant.id).all():
+                    if branch.province_code or branch.municipality_code:
+                        validate_location(code, branch.province_code, branch.municipality_code)
 
         if "name" in update_data and update_data["name"]:
             clean_name = update_data["name"].strip()

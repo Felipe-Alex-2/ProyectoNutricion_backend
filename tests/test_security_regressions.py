@@ -63,9 +63,9 @@ def test_public_web_registration_is_patient(client):
 
 @pytest.mark.parametrize("actor", ["org", "nutri"])
 def test_other_clinic_records_and_profile_are_denied(client, accounts, actor):
-    assert client.get("/api/v1/clinical/patients/other/records", headers=headers(actor)).status_code == 403
-    assert client.get("/api/v1/plans/patient/other", headers=headers(actor)).status_code == 403
-    assert client.put("/api/v1/users/patients/other", headers=headers(actor), json={"full_name": "Changed"}).status_code == 403
+    assert client.get("/api/v1/clinical/patients/other/records", headers=headers(actor)).status_code in (403, 404)
+    assert client.get("/api/v1/plans/patient/other", headers=headers(actor)).status_code in (403, 404)
+    assert client.put("/api/v1/users/patients/other", headers=headers(actor), json={"full_name": "Changed"}).status_code in (403, 404)
 
 
 def test_nutritionist_needs_active_patient_link(client, db_session, accounts):
@@ -83,8 +83,8 @@ def test_receipt_requires_auth_and_clinic_access(client, db_session, accounts):
     db_session.add(Payment(id="payment-b", tenant_id="b", customer_name="Other Patient", concept="Consultation", amount=50, currency="USD", status="PENDING"))
     db_session.commit()
     assert client.get("/api/v1/payments/payment-b/pdf").status_code == 401
-    assert client.get("/api/v1/payments/payment-b/pdf", headers=headers("org")).status_code == 403
-    assert client.post("/api/v1/payments/payment-b/cancel", headers=headers("org")).status_code == 403
+    assert client.get("/api/v1/payments/payment-b/pdf", headers=headers("org")).status_code in (403, 404)
+    assert client.post("/api/v1/payments/payment-b/cancel", headers=headers("org")).status_code in (403,404)
 
 
 def test_other_buyers_order_is_not_verified(client, db_session, accounts, monkeypatch):

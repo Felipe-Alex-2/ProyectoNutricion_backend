@@ -1,10 +1,11 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey
 from app.database import Base
 
 
-class GeneratedReport(Base):
+class GeneratedReport(WorkspaceOwned, Base):
     __tablename__ = 'generated_reports'
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String(36), ForeignKey('tenants.id', ondelete='RESTRICT'), nullable=True, index=True)

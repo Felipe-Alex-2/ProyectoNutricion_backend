@@ -34,7 +34,7 @@ def audit_business_changes(db, flush_context, instances):
             if not table or table in excluded: continue
             if state == 'ACTUALIZADO':
                 changed = {attr.key for attr in inspect(obj).attrs if attr.history.has_changes()}
-                if not changed or changed <= {'session_version', 'updated_at', 'is_read', 'reminder_sent'}: continue
+                if not changed or changed <= {'session_version', 'updated_at', 'is_read', 'reminder_sent', 'workspace_tenant_id', 'workspace_branch_id'}: continue
             if hasattr(obj, 'id') and obj.id is None: obj.id = str(uuid4())
             company = getattr(obj, 'tenant_id', None) or (obj.id if table == 'tenants' else actor.tenant_id)
             label = getattr(obj, 'title', None) or getattr(obj, 'name', None) or getattr(obj, 'full_name', None) or getattr(obj, 'id', '')
@@ -42,4 +42,6 @@ def audit_business_changes(db, flush_context, instances):
             if table == 'appointments' and state == 'ACTUALIZADO':
                 action = {'CONFIRMED':'CITA_CONFIRMADA','CANCELLED':'CITA_CANCELADA','COMPLETED':'CITA_ATENDIDA'}.get(obj.status, action)
             if table == 'payments' and getattr(obj, 'status', '') == 'COMPLETED' and (state == 'CREADO' or inspect(obj).attrs.status.history.has_changes()): action = 'COBRO_CONFIRMADO'
-            db.add(ActivityLog(tenant_id=company, user_id=actor.id, user_email=actor.email, user_name=actor.full_name, action=action, description=f'{action}: {table} · {str(label)[:200]}', category='OPERACIONES'))
+            from app.core.workspace import current
+            scope = current(db)
+            db.add(ActivityLog(tenant_id=company or (scope.tenant_id if scope else None), branch_id=(scope.branch_id if scope and scope.branch_id else getattr(obj, 'branch_id', None)), user_id=actor.id, user_email=actor.email, user_name=actor.full_name, action=action, description=f'{action}: {table} · {str(label)[:200]}', category='OPERACIONES'))

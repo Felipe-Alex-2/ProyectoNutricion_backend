@@ -56,6 +56,7 @@ class UserCreate(UserBase):
 
 
 class OrganizationUserCreate(UserBase):
+    branch_id: Optional[str] = None
     password: str = Field(..., min_length=8, max_length=128, description="Contraseña de acceso (mínimo 8 caracteres)")
     role_id: str = Field(..., min_length=2, max_length=50, description="Rol del usuario (ej: NUTRICIONISTA, CLIENTE, ADMIN_ORGANIZATION)")
     tenant_id: str = Field(..., min_length=1, description="ID de la organización o clínica asociada")
@@ -67,6 +68,7 @@ class OrganizationUserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    branch_id: Optional[str] = None
     full_name: Optional[str] = Field(None, min_length=2, max_length=250, description="Nombre completo (máximo 250 caracteres)")
     email: Optional[EmailStr] = Field(None, description="Correo electrónico")
     phone: Optional[str] = Field(None, min_length=7, max_length=25, description="Teléfono de contacto")
@@ -115,6 +117,10 @@ class DeveloperKeyVerifyResponse(BaseModel):
 
 
 class UserResponse(UserBase):
+    active_tenant_name: Optional[str] = None
+    active_branch_name: Optional[str] = None
+    active_tenant_id: Optional[str] = None
+    active_branch_id: Optional[str] = None
     branch_id: Optional[str] = None
     id: str
     role_id: str
@@ -131,7 +137,13 @@ class UserResponse(UserBase):
 
 class ProfileUpdate(UserUpdate):
     """Personal profile fields; administrative fields are explicitly rejected."""
-    @field_validator("role_id", "tenant_id", "is_active", mode="before")
+    @field_validator("role_id", "tenant_id", "branch_id", "is_active", mode="before")
     @classmethod
     def reject_administrative_fields(cls, value):
         raise ValueError("Los campos administrativos no se pueden modificar desde el perfil.")
+
+
+class WorkspaceUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    tenant_id: Optional[str] = None
+    branch_id: Optional[str] = None

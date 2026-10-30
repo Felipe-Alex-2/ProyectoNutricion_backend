@@ -37,10 +37,10 @@ def test_company_and_branch_client_rankings_include_zero_and_real_counts(client,
     response=voice(client,'¿Qué empresa tiene más clientes?');assert response.status_code==200,response.text
     data=response.json();assert data['parsed_request']['group_by']=='company'
     rows=data['report_data']['rows'];assert [(r['company_name'],r['value']) for r in rows]==[('Nutri Norte',3),('Vida Sur',1),('Sin Clientes',0)]
-    response=voice(client,'¿Qué sucursal tiene más clientes?','admin');assert response.status_code==200,response.text
+    response=voice(client,'¿Qué sucursal tiene más clientes?','root',tenant_id='alpha');assert response.status_code==200,response.text
     rows=response.json()['report_data']['rows'];assert [(r['branch_name'],r['value']) for r in rows]==[('Centro',2),('Terminal',1),('Parque',0)]
-    active=voice(client,'Cantidad de clientes activos por sucursal','admin').json()['report_data'];assert sum(r['value'] for r in active['rows'])==2
-    inactive=voice(client,'Cantidad de clientes inactivos por sucursal','admin').json()['report_data'];assert sum(r['value'] for r in inactive['rows'])==1
+    active=voice(client,'Cantidad de clientes activos por sucursal','root',tenant_id='alpha').json()['report_data'];assert sum(r['value'] for r in active['rows'])==2
+    inactive=voice(client,'Cantidad de clientes inactivos por sucursal','root',tenant_id='alpha').json()['report_data'];assert sum(r['value'] for r in inactive['rows'])==1
 
 def test_scope_names_multiselect_and_permissions(client,reporting):
     result=voice(client,'Clientes de sucursal Terminal de empresa Nutri Norte');assert result.status_code==200,result.text
@@ -55,7 +55,7 @@ def test_scope_names_multiselect_and_permissions(client,reporting):
     assert sum(r['value'] for r in both.json()['rows'])==2
 
 def test_income_ranking_filters_confirmed_and_does_not_mix_currencies(client,reporting):
-    result=voice(client,'Ingresos cobrados por sucursal este mes en USD','admin');assert result.status_code==200,result.text
+    result=voice(client,'Ingresos cobrados por sucursal este mes en USD','root',tenant_id='alpha');assert result.status_code==200,result.text
     data=result.json();p=data['parsed_request'];assert p['metric']=='sum' and p['status']=='COMPLETED' and p['currency']=='USD'
     assert p['start_date']=='2026-10-01' and p['end_date']=='2026-10-29'
     assert [(r['branch_name'],r['value']) for r in data['report_data']['rows']]==[('Terminal',70),('Centro',20)]
@@ -69,7 +69,7 @@ def test_unique_attended_patients_and_calendar_filters(client,reporting):
     assert data['report_data']['rows']==[{'month':'2026-10','value':2}]
     count=voice(client,'Cantidad de citas atendidas este mes','admin');assert count.status_code==200,count.text
     assert count.json()['report_data']['rows'][0]['value']==3
-    last=voice(client,'Cantidad de citas canceladas el mes pasado','admin');assert last.status_code==200,last.text
+    last=voice(client,'Cantidad de citas canceladas el mes pasado','root',tenant_id='alpha');assert last.status_code==200,last.text
     assert last.json()['report_data']['rows'][0]['value']==1
     assert ReportIntentService.dates('ultimos 30 dias')==('2026-09-30','2026-10-29')
     assert ReportIntentService.dates('enero a marzo de 2026')==('2026-01-01','2026-03-31')
@@ -79,7 +79,7 @@ def test_totals_before_limit_no_duplicate_patient_count(client,db_session,report
     response=query(client,entity='patients',aggregate=True,group_by='company',limit=1);assert response.status_code==200,response.text
     assert response.json()['total_rows']==3 and response.json()['rows'][0]['value']==3
     assert len(response.json()['rows'])==1
-    less=voice(client,'¿Qué sucursal tiene menos clientes?','admin');assert less.status_code==200,less.text
+    less=voice(client,'¿Qué sucursal tiene menos clientes?','root',tenant_id='alpha');assert less.status_code==200,less.text
     assert less.json()['report_data']['rows'][0]['branch_name']=='Parque'
 
 def test_clear_failure_invalid_plan_dates_and_columns(client,reporting,monkeypatch):
@@ -97,14 +97,14 @@ def test_ai_flexible_plan_uses_database_not_fabricated_numbers(client,reporting,
     monkeypatch.setattr(GeminiService,'is_configured',lambda:True)
     monkeypatch.setattr(GeminiService,'generate_json',lambda *a,**k:{'entity':'payments','aggregate':True,'group_by':'payment_method','metric':'count','status':'COMPLETED','explanation':'Invented 999999 clients'})
     response=voice(client,'Desglosa las transacciones según cómo se abonaron','admin');assert response.status_code==200,response.text
-    assert response.json()['report_data']['rows'][0]['value']==2
+    assert response.json()['report_data']['rows'][0]['value']==1
     assert '999999' not in response.text
 
 def test_cross_company_save_export_and_audit_entity(client,db_session,reporting):
     body={'entity':'patients','group_by':'company','aggregate':True}
     saved=client.post('/api/v1/reports/saved',headers=headers(),json=body);assert saved.status_code==201,saved.text
     row=db_session.get(GeneratedReport,saved.json()['id']);assert row.tenant_id is None
-    assert client.get('/api/v1/reports/saved/'+row.id,headers=headers('admin')).status_code==403
+    assert client.get('/api/v1/reports/saved/'+row.id,headers=headers('admin')).status_code in (403,404)
     for suffix in ['excel','pdf']:
         exported=client.post('/api/v1/reports/export/'+suffix,headers=headers(),json=body);assert exported.status_code==200,exported.text[:200]
         assert len(exported.content)>200
@@ -113,10 +113,10 @@ def test_cross_company_save_export_and_audit_entity(client,db_session,reporting)
 
 
 def test_cancellation_rate_numeric_filters_and_unrecognized_scope(client,reporting):
-    rate=voice(client,'Tasa de cancelación de citas por sucursal este año','admin');assert rate.status_code==200,rate.text
+    rate=voice(client,'Tasa de cancelación de citas por sucursal este año','root',tenant_id='alpha');assert rate.status_code==200,rate.text
     data=rate.json();assert data['parsed_request']['metric']=='cancellation_rate'
     assert {r['branch_name']:r['value'] for r in data['report_data']['rows']}=={'Terminal':100,'Centro':0}
-    amount=voice(client,'Cobros mayores a 30 USD','admin');assert amount.status_code==200,amount.text
+    amount=voice(client,'Cobros mayores a 30 USD','root',tenant_id='alpha');assert amount.status_code==200,amount.text
     assert {r['amount'] for r in amount.json()['report_data']['rows']}=={9999,70}
     assert voice(client,'Clientes de empresa Fantasma').status_code==400
     assert voice(client,'Clientes de sucursal Inexistente','admin').status_code==400
@@ -136,6 +136,9 @@ def test_branch_attribution_cannot_be_forged_and_payment_keeps_it(client,db_sess
     body={'tenant_id':'alpha','branch_id':'b1','customer_name':'Cliente','concept':'Consulta','amount':12,'payment_method':'EFECTIVO'}
     assert client.post('/api/v1/payments/create',headers=headers('admin'),json=body).status_code==400
     body['branch_id']='a2'
+    assert client.post('/api/v1/payments/create',headers=headers('admin'),json=body).status_code==400
+    switched=client.put('/api/v1/users/me/workspace',headers=headers('admin'),json={'tenant_id':'alpha','branch_id':'a2'})
+    assert switched.status_code==200,switched.text
     result=client.post('/api/v1/payments/create',headers=headers('admin'),json=body);assert result.status_code==200,result.text
     payment=db_session.get(Payment,result.json()['payment_id']);assert payment.branch_id=='a2'
     db_session.get(User,'admin').branch_id='a1';db_session.commit();assert db_session.get(Payment,payment.id).branch_id=='a2'

@@ -1,9 +1,10 @@
+from app.models.workspace import WorkspaceOwned
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Numeric, String
 from app.database import Base
 
 
-class SubscriptionReceipt(Base):
+class SubscriptionReceipt(WorkspaceOwned, Base):
     __tablename__ = "subscription_receipts"
 
     # One durable receipt per subscription, even if verification is retried.

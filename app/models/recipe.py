@@ -1,3 +1,4 @@
+from app.models.workspace import WorkspaceOwned
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
@@ -5,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class Recipe(Base):
+class Recipe(WorkspaceOwned, Base):
     __tablename__ = "recipes"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
@@ -50,7 +51,7 @@ class Recipe(Base):
     assignments = relationship("RecipeAssignment", back_populates="recipe", cascade="all, delete-orphan")
 
 
-class RecipeAssignment(Base):
+class RecipeAssignment(WorkspaceOwned, Base):
     __tablename__ = "recipe_assignments"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)

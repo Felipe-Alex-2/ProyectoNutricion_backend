@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -9,6 +9,7 @@ from app.models.tenant import Tenant
 from app.core.authorization import require_user_management, require_role, VALID_ROLES
 from app.schemas.user import UserResponse, OrganizationUserCreate, UserUpdate
 from app.core.security import get_password_hash
+from app.services.branch_scope import operation_branch
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
@@ -79,7 +80,7 @@ def create_organization_user(
         raise BadRequestException("Rol inválido.")
     # Check email unique
     clean_email = data.email.strip().lower()
-    existing = db.query(User).filter(User.email == clean_email).first()
+    existing = db.execute(select(User.__table__.c.id).where(User.__table__.c.email == clean_email)).first()
     if existing:
         raise ConflictException(f"El correo '{clean_email}' ya está registrado")
 
@@ -105,6 +106,7 @@ def create_organization_user(
         phone=data.phone.strip() if data.phone else None,
         role_id=data.role_id,
         tenant_id=target_tenant_id,
+        branch_id=operation_branch(db, target_tenant_id, requested=data.branch_id),
         is_active=True,
         is_verified=True,
     )
@@ -163,10 +165,17 @@ def update_organization_user(
             if not target or not target.is_active: raise BadRequestException('La empresa no está disponible.')
             branch = db.query(Branch).filter_by(tenant_id=target.id,is_active=True).first()
             user.branch_id = branch.id if branch else None
+            user.workspace_branch_id = None
+            user.workspace_tenant_id = None
             user.session_version = (user.session_version or 0) + 1
         user.tenant_id = data.tenant_id
     if data.is_active is not None:
         user.is_active = data.is_active
+    if data.branch_id is not None:
+        from app.services.branch_scope import operation_branch
+        user.branch_id = operation_branch(db, user.tenant_id, requested=data.branch_id)
+        user.workspace_branch_id = None
+        user.session_version = (user.session_version or 0) + 1
 
     # Modificación de contraseña: Solo Superadministrador Global
     if data.password:

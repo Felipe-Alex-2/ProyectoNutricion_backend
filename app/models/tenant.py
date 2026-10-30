@@ -14,6 +14,7 @@ class Tenant(Base):
     phone = Column(String(50), nullable=True)
     email = Column(String(255), nullable=True)
     address = Column(String(255), nullable=True)
+    department_code = Column(String(2), nullable=True)
     logo_url = Column(String(500), nullable=True)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -26,5 +27,5 @@ class Tenant(Base):
     )
 
     # Relationships
-    users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="tenant", cascade="all, delete-orphan", foreign_keys='User.tenant_id')
     patient_links = relationship("PatientNutritionistLink", back_populates="tenant")

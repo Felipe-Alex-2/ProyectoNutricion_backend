@@ -12,6 +12,8 @@ class Branch(Base):
     name = Column(String(250), nullable=False)
     code = Column(String(50), nullable=False)
     address = Column(String(255), nullable=True)
+    province_code = Column(String(4), nullable=True)
+    municipality_code = Column(String(6), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 

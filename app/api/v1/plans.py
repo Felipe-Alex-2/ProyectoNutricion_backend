@@ -58,7 +58,7 @@ def update_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    existing_plan = db.get(NutritionalPlan, plan_id)
+    existing_plan = db.query(NutritionalPlan).filter(NutritionalPlan.id == plan_id).first()
     if existing_plan is None:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     require_patient_access(db, current_user, existing_plan.patient_id)
@@ -90,7 +90,7 @@ def approve_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    existing_plan = db.get(NutritionalPlan, plan_id)
+    existing_plan = db.query(NutritionalPlan).filter(NutritionalPlan.id == plan_id).first()
     if existing_plan is None:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
     require_patient_access(db, current_user, existing_plan.patient_id)

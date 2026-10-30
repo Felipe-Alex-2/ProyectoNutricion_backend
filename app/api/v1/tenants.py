@@ -29,7 +29,7 @@ def list_public_tenants(
     db: Session = Depends(get_db),
 ):
     """Retorna las sucursales/clínicas activas disponibles públicamente para el registro de clientes."""
-    return [{"id":t.id,"name":t.name,"code":t.code} for t in db.query(Tenant).filter_by(is_active=True).all()]
+    return [{"id":t.id,"name":t.name,"code":t.code,"department_code":t.department_code} for t in db.query(Tenant).filter_by(is_active=True).all()]
 
 
 @router.get('/administrator-candidates')

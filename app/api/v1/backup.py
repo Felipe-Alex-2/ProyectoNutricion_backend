@@ -38,7 +38,7 @@ def get_backup_settings(
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else (tenant_id or getattr(current_user, "_workspace_company_id", None))
     if not effective_tenant: raise BadRequestException('Selecciona una empresa.')
     return BackupService.get_or_create_settings(db, tenant_id=effective_tenant)
 
@@ -51,7 +51,7 @@ def update_backup_settings(
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else (tenant_id or getattr(current_user, "_workspace_company_id", None))
     if not effective_tenant: raise BadRequestException('Selecciona una empresa.')
     updated = BackupService.update_settings(db, data, tenant_id=effective_tenant)
     try:
@@ -78,8 +78,9 @@ def export_backup_manual(
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else (tenant_id or getattr(current_user, "_workspace_company_id", None))
     if not effective_tenant: raise BadRequestException('Selecciona una empresa para respaldar.')
+    require_tenant(current_user, effective_tenant)
     result = BackupService.create_backup(db, backup_type="MANUAL", user_name=current_user.full_name, tenant_id=effective_tenant)
 
     try:
@@ -108,7 +109,7 @@ def get_backup_history(
     db: Session = Depends(get_db),
 ):
     ensure_backup_access(current_user)
-    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else tenant_id
+    effective_tenant = current_user.tenant_id if current_user.role_id != "SUPERADMIN" else (tenant_id or getattr(current_user, "_workspace_company_id", None))
     return BackupService.list_backups(db, tenant_id=effective_tenant)
 
 
@@ -144,9 +145,10 @@ def download_backup_file(
 
 def resolve_backup_company(user, tenant_id):
     ensure_backup_access(user)
-    company = tenant_id if user.role_id == 'SUPERADMIN' else user.tenant_id
+    company = (tenant_id or getattr(user, "_workspace_company_id", None)) if user.role_id == 'SUPERADMIN' else user.tenant_id
     if not company: raise BadRequestException('Selecciona una empresa.')
     if user.role_id != 'SUPERADMIN' and tenant_id and tenant_id != company: raise ForbiddenException('El respaldo pertenece a otra empresa.')
+    require_tenant(user, company)
     return company
 
 

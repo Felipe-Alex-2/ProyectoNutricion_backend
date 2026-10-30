@@ -38,6 +38,9 @@ class BackupService:
     @classmethod
     def get_or_create_settings(cls, db: Session, tenant_id: Optional[str] = None) -> BackupSetting:
         q = db.query(BackupSetting)
+        from app.core.workspace import current
+        scope = current(db)
+        q = q.filter(BackupSetting.branch_id == (scope.branch_id if scope else None))
         if tenant_id:
             q = q.filter(BackupSetting.tenant_id == tenant_id)
         else:
@@ -90,7 +93,9 @@ class BackupService:
                 records = [r for r in query.all() if is_mutation(r.action)]
             else: records = query.all()
             tables[name] = [{c.name: getattr(r, c.name) for c in model.__table__.columns if c.name != 'ip_address'} for r in records]
-        snapshot = {"format":"NUTRISALUD_OPERATIONAL_BACKUP", "version":2, "tenant_id":tenant_id, "created_at":datetime.now(timezone.utc).isoformat(), "tables":tables}
+        from app.core.workspace import current
+        scope = current(db)
+        snapshot = {"format":"NUTRISALUD_OPERATIONAL_BACKUP", "version":2, "tenant_id":tenant_id, "branch_id":scope.branch_id if scope else None, "created_at":datetime.now(timezone.utc).isoformat(), "tables":tables}
         payload = canonical(snapshot).encode()
         if len(payload) > 32*1024*1024: raise ValueError('El respaldo supera 32 MB. Reduce el volumen antes de exportarlo.')
         envelope = json.dumps({"format":"nutrisalud-encrypted-v2", "ciphertext":cls._cipher().encrypt(payload).decode('ascii')}).encode()

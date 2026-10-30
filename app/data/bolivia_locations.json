@@ -1,0 +1,2106 @@
+[
+  {
+    "code": "01",
+    "name": "Chuquisaca",
+    "provinces": [
+      {
+        "code": "0101",
+        "name": "Oropeza",
+        "municipalities": [
+          {
+            "code": "010103",
+            "name": "Poroma"
+          },
+          {
+            "code": "010101",
+            "name": "Sucre"
+          },
+          {
+            "code": "010102",
+            "name": "Yotala"
+          }
+        ]
+      },
+      {
+        "code": "0102",
+        "name": "Azurduy",
+        "municipalities": [
+          {
+            "code": "010201",
+            "name": "Azurduy"
+          },
+          {
+            "code": "010202",
+            "name": "Tarvita"
+          }
+        ]
+      },
+      {
+        "code": "0103",
+        "name": "Zudáñez",
+        "municipalities": [
+          {
+            "code": "010304",
+            "name": "Icla"
+          },
+          {
+            "code": "010303",
+            "name": "Mojocoya"
+          },
+          {
+            "code": "010302",
+            "name": "Presto"
+          },
+          {
+            "code": "010301",
+            "name": "Zudáñez"
+          }
+        ]
+      },
+      {
+        "code": "0104",
+        "name": "Tomina",
+        "municipalities": [
+          {
+            "code": "010404",
+            "name": "Alcalá"
+          },
+          {
+            "code": "010405",
+            "name": "El Villar"
+          },
+          {
+            "code": "010401",
+            "name": "Padilla"
+          },
+          {
+            "code": "010403",
+            "name": "Sopachuy"
+          },
+          {
+            "code": "010402",
+            "name": "Tomina"
+          }
+        ]
+      },
+      {
+        "code": "0105",
+        "name": "Hernando Siles",
+        "municipalities": [
+          {
+            "code": "010502",
+            "name": "Huacareta"
+          },
+          {
+            "code": "010501",
+            "name": "Monteagudo"
+          }
+        ]
+      },
+      {
+        "code": "0106",
+        "name": "Yamparáez",
+        "municipalities": [
+          {
+            "code": "010601",
+            "name": "Tarabuco"
+          },
+          {
+            "code": "010602",
+            "name": "Yamparáez"
+          }
+        ]
+      },
+      {
+        "code": "0107",
+        "name": "Nor Cinti",
+        "municipalities": [
+          {
+            "code": "010701",
+            "name": "Camargo"
+          },
+          {
+            "code": "010703",
+            "name": "Incahuasi"
+          },
+          {
+            "code": "010702",
+            "name": "San Lucas"
+          },
+          {
+            "code": "010704",
+            "name": "Villa Charcas"
+          }
+        ]
+      },
+      {
+        "code": "0108",
+        "name": "Belisario Boeto",
+        "municipalities": [
+          {
+            "code": "010801",
+            "name": "Villa Serrano"
+          }
+        ]
+      },
+      {
+        "code": "0109",
+        "name": "Sud Cinti",
+        "municipalities": [
+          {
+            "code": "010902",
+            "name": "Culpina"
+          },
+          {
+            "code": "010903",
+            "name": "Las Carreras"
+          },
+          {
+            "code": "010901",
+            "name": "Villa Abecia"
+          }
+        ]
+      },
+      {
+        "code": "0110",
+        "name": "Luis Calvo",
+        "municipalities": [
+          {
+            "code": "011002",
+            "name": "Huacaya (Autonomía Guaraní Chaqueño de Huacaya)"
+          },
+          {
+            "code": "011003",
+            "name": "Macharetí"
+          },
+          {
+            "code": "011001",
+            "name": "Villa Vaca Guzmán"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "02",
+    "name": "La Paz",
+    "provinces": [
+      {
+        "code": "0201",
+        "name": "Murillo",
+        "municipalities": [
+          {
+            "code": "020104",
+            "name": "Achocalla"
+          },
+          {
+            "code": "020105",
+            "name": "El Alto"
+          },
+          {
+            "code": "020103",
+            "name": "Mecapaca"
+          },
+          {
+            "code": "020101",
+            "name": "Nuestra Señora de La Paz"
+          },
+          {
+            "code": "020102",
+            "name": "Palca"
+          }
+        ]
+      },
+      {
+        "code": "0202",
+        "name": "Omasuyos",
+        "municipalities": [
+          {
+            "code": "020201",
+            "name": "Achacachi"
+          },
+          {
+            "code": "020206",
+            "name": "Chua Cocani"
+          },
+          {
+            "code": "020203",
+            "name": "Huarina"
+          },
+          {
+            "code": "020205",
+            "name": "Huatajata"
+          },
+          {
+            "code": "020204",
+            "name": "Santiago de Huata"
+          },
+          {
+            "code": "020202",
+            "name": "Villa Ancoraimes"
+          }
+        ]
+      },
+      {
+        "code": "0203",
+        "name": "Pacajes",
+        "municipalities": [
+          {
+            "code": "020303",
+            "name": "Calacoto"
+          },
+          {
+            "code": "020302",
+            "name": "Caquiaviri"
+          },
+          {
+            "code": "020305",
+            "name": "Charaña"
+          },
+          {
+            "code": "020304",
+            "name": "Comanche"
+          },
+          {
+            "code": "020301",
+            "name": "Corocoro"
+          },
+          {
+            "code": "020307",
+            "name": "Nazacara de Pacajes"
+          },
+          {
+            "code": "020308",
+            "name": "Santiago de Callapa"
+          },
+          {
+            "code": "020306",
+            "name": "Waldo Ballivián"
+          }
+        ]
+      },
+      {
+        "code": "0204",
+        "name": "Camacho",
+        "municipalities": [
+          {
+            "code": "020405",
+            "name": "Escoma"
+          },
+          {
+            "code": "020404",
+            "name": "Humanata"
+          },
+          {
+            "code": "020402",
+            "name": "Mocomoco"
+          },
+          {
+            "code": "020401",
+            "name": "Puerto Acosta"
+          },
+          {
+            "code": "020403",
+            "name": "Puerto Mayor de Carabuco"
+          }
+        ]
+      },
+      {
+        "code": "0205",
+        "name": "Muñecas",
+        "municipalities": [
+          {
+            "code": "020503",
+            "name": "Aucapata"
+          },
+          {
+            "code": "020502",
+            "name": "Ayata"
+          },
+          {
+            "code": "020501",
+            "name": "Chuma"
+          }
+        ]
+      },
+      {
+        "code": "0206",
+        "name": "Larecaja",
+        "municipalities": [
+          {
+            "code": "020605",
+            "name": "Combaya"
+          },
+          {
+            "code": "020602",
+            "name": "Guanay"
+          },
+          {
+            "code": "020607",
+            "name": "Mapiri"
+          },
+          {
+            "code": "020604",
+            "name": "Quiabaya"
+          },
+          {
+            "code": "020601",
+            "name": "Sorata"
+          },
+          {
+            "code": "020603",
+            "name": "Tacacoma"
+          },
+          {
+            "code": "020608",
+            "name": "Teoponte"
+          },
+          {
+            "code": "020606",
+            "name": "Tipuani"
+          }
+        ]
+      },
+      {
+        "code": "0207",
+        "name": "Franz Tamayo",
+        "municipalities": [
+          {
+            "code": "020701",
+            "name": "Apolo"
+          },
+          {
+            "code": "020702",
+            "name": "Pelechuco"
+          }
+        ]
+      },
+      {
+        "code": "0208",
+        "name": "Ingavi",
+        "municipalities": [
+          {
+            "code": "020804",
+            "name": "Desaguadero"
+          },
+          {
+            "code": "020806",
+            "name": "Jesús de Machaka"
+          },
+          {
+            "code": "020805",
+            "name": "La (Marka) San Andrés de Machaca"
+          },
+          {
+            "code": "020802",
+            "name": "Puerto Mayor de Guaqui"
+          },
+          {
+            "code": "020807",
+            "name": "Taraco"
+          },
+          {
+            "code": "020803",
+            "name": "Tiahuanacu"
+          },
+          {
+            "code": "020801",
+            "name": "Viacha"
+          }
+        ]
+      },
+      {
+        "code": "0209",
+        "name": "Loayza",
+        "municipalities": [
+          {
+            "code": "020905",
+            "name": "Cairoma"
+          },
+          {
+            "code": "020901",
+            "name": "Luribay"
+          },
+          {
+            "code": "020904",
+            "name": "Malla"
+          },
+          {
+            "code": "020902",
+            "name": "Sapahaqui"
+          },
+          {
+            "code": "020903",
+            "name": "Yaco"
+          }
+        ]
+      },
+      {
+        "code": "0210",
+        "name": "Inquisivi",
+        "municipalities": [
+          {
+            "code": "021003",
+            "name": "Cajuata"
+          },
+          {
+            "code": "021004",
+            "name": "Colquiri"
+          },
+          {
+            "code": "021005",
+            "name": "Ichoca"
+          },
+          {
+            "code": "021001",
+            "name": "Inquisivi"
+          },
+          {
+            "code": "021002",
+            "name": "Quime"
+          },
+          {
+            "code": "021006",
+            "name": "Villa Libertad Licoma"
+          }
+        ]
+      },
+      {
+        "code": "0211",
+        "name": "Sur Yungas",
+        "municipalities": [
+          {
+            "code": "021101",
+            "name": "Chulumani"
+          },
+          {
+            "code": "021102",
+            "name": "Irupana"
+          },
+          {
+            "code": "021105",
+            "name": "La Asunta"
+          },
+          {
+            "code": "021104",
+            "name": "Palos Blancos"
+          },
+          {
+            "code": "021103",
+            "name": "Yanacachi"
+          }
+        ]
+      },
+      {
+        "code": "0212",
+        "name": "Los Andes",
+        "municipalities": [
+          {
+            "code": "021203",
+            "name": "Batallas"
+          },
+          {
+            "code": "021202",
+            "name": "Laja"
+          },
+          {
+            "code": "021201",
+            "name": "Pucarani"
+          },
+          {
+            "code": "021204",
+            "name": "Puerto Pérez"
+          }
+        ]
+      },
+      {
+        "code": "0213",
+        "name": "Aroma",
+        "municipalities": [
+          {
+            "code": "021303",
+            "name": "Ayo Ayo"
+          },
+          {
+            "code": "021304",
+            "name": "Calamarca"
+          },
+          {
+            "code": "021307",
+            "name": "Collana"
+          },
+          {
+            "code": "021306",
+            "name": "Colquencha"
+          },
+          {
+            "code": "021305",
+            "name": "Patacamaya"
+          },
+          {
+            "code": "021301",
+            "name": "Sicasica"
+          },
+          {
+            "code": "021302",
+            "name": "Umala"
+          }
+        ]
+      },
+      {
+        "code": "0214",
+        "name": "Nor Yungas",
+        "municipalities": [
+          {
+            "code": "021402",
+            "name": "Coripata"
+          },
+          {
+            "code": "021401",
+            "name": "Coroico"
+          }
+        ]
+      },
+      {
+        "code": "0215",
+        "name": "Abel Iturralde",
+        "municipalities": [
+          {
+            "code": "021501",
+            "name": "Ixiamas"
+          },
+          {
+            "code": "021502",
+            "name": "San Buenaventura"
+          }
+        ]
+      },
+      {
+        "code": "0216",
+        "name": "Bautista Saavedra",
+        "municipalities": [
+          {
+            "code": "021601",
+            "name": "Charazani"
+          },
+          {
+            "code": "021602",
+            "name": "Curva"
+          }
+        ]
+      },
+      {
+        "code": "0217",
+        "name": "Manco Kapac",
+        "municipalities": [
+          {
+            "code": "021701",
+            "name": "Copacabana"
+          },
+          {
+            "code": "021702",
+            "name": "San Pedro de Tiquina"
+          },
+          {
+            "code": "021703",
+            "name": "Tito Yupanqui"
+          }
+        ]
+      },
+      {
+        "code": "0218",
+        "name": "Gualberto Villarroel",
+        "municipalities": [
+          {
+            "code": "021803",
+            "name": "Chacarilla"
+          },
+          {
+            "code": "021802",
+            "name": "Papel Pampa"
+          },
+          {
+            "code": "021801",
+            "name": "San Pedro de Curahuara"
+          }
+        ]
+      },
+      {
+        "code": "0219",
+        "name": "General José Manuel Pando",
+        "municipalities": [
+          {
+            "code": "021902",
+            "name": "Catacora"
+          },
+          {
+            "code": "021901",
+            "name": "Santiago de Machaca"
+          }
+        ]
+      },
+      {
+        "code": "0220",
+        "name": "Caranavi",
+        "municipalities": [
+          {
+            "code": "022002",
+            "name": "Alto Beni"
+          },
+          {
+            "code": "022001",
+            "name": "Caranavi"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "03",
+    "name": "Cochabamba",
+    "provinces": [
+      {
+        "code": "0301",
+        "name": "Cercado",
+        "municipalities": [
+          {
+            "code": "030101",
+            "name": "Cochabamba"
+          }
+        ]
+      },
+      {
+        "code": "0302",
+        "name": "Campero",
+        "municipalities": [
+          {
+            "code": "030201",
+            "name": "Aiquile"
+          },
+          {
+            "code": "030203",
+            "name": "Omereque"
+          },
+          {
+            "code": "030202",
+            "name": "Pasorapa"
+          }
+        ]
+      },
+      {
+        "code": "0303",
+        "name": "Ayopaya",
+        "municipalities": [
+          {
+            "code": "030301",
+            "name": "Ayopaya"
+          },
+          {
+            "code": "030303",
+            "name": "Cocapata"
+          },
+          {
+            "code": "030302",
+            "name": "Morochata"
+          }
+        ]
+      },
+      {
+        "code": "0304",
+        "name": "Esteban Arze",
+        "municipalities": [
+          {
+            "code": "030402",
+            "name": "Anzaldo"
+          },
+          {
+            "code": "030403",
+            "name": "Arbieto"
+          },
+          {
+            "code": "030404",
+            "name": "Sacabamba"
+          },
+          {
+            "code": "030401",
+            "name": "Tarata"
+          }
+        ]
+      },
+      {
+        "code": "0305",
+        "name": "Arani",
+        "municipalities": [
+          {
+            "code": "030501",
+            "name": "Arani"
+          },
+          {
+            "code": "030502",
+            "name": "Vacas"
+          }
+        ]
+      },
+      {
+        "code": "0306",
+        "name": "Arque",
+        "municipalities": [
+          {
+            "code": "030601",
+            "name": "Arque"
+          },
+          {
+            "code": "030602",
+            "name": "Tacopaya"
+          }
+        ]
+      },
+      {
+        "code": "0307",
+        "name": "Capinota",
+        "municipalities": [
+          {
+            "code": "030701",
+            "name": "Capinota"
+          },
+          {
+            "code": "030702",
+            "name": "Santiváñez"
+          },
+          {
+            "code": "030703",
+            "name": "Sicaya"
+          }
+        ]
+      },
+      {
+        "code": "0308",
+        "name": "Germán Jordán",
+        "municipalities": [
+          {
+            "code": "030801",
+            "name": "Cliza"
+          },
+          {
+            "code": "030802",
+            "name": "Toco"
+          },
+          {
+            "code": "030803",
+            "name": "Tolata"
+          }
+        ]
+      },
+      {
+        "code": "0309",
+        "name": "Quillacollo",
+        "municipalities": [
+          {
+            "code": "030905",
+            "name": "Colcapirhua"
+          },
+          {
+            "code": "030901",
+            "name": "Quillacollo"
+          },
+          {
+            "code": "030902",
+            "name": "Sipesipe"
+          },
+          {
+            "code": "030903",
+            "name": "Tiquipaya"
+          },
+          {
+            "code": "030904",
+            "name": "Vinto"
+          }
+        ]
+      },
+      {
+        "code": "0310",
+        "name": "Chapare",
+        "municipalities": [
+          {
+            "code": "031002",
+            "name": "Colomi"
+          },
+          {
+            "code": "031001",
+            "name": "Sacaba"
+          },
+          {
+            "code": "031003",
+            "name": "Villa Tunari"
+          }
+        ]
+      },
+      {
+        "code": "0311",
+        "name": "Tapacarí",
+        "municipalities": [
+          {
+            "code": "031101",
+            "name": "Tapacarí"
+          }
+        ]
+      },
+      {
+        "code": "0312",
+        "name": "Carrasco",
+        "municipalities": [
+          {
+            "code": "031204",
+            "name": "Chimoré"
+          },
+          {
+            "code": "031206",
+            "name": "Entre Ríos"
+          },
+          {
+            "code": "031203",
+            "name": "Pocona"
+          },
+          {
+            "code": "031202",
+            "name": "Pojo"
+          },
+          {
+            "code": "031205",
+            "name": "Puerto Villarroel"
+          },
+          {
+            "code": "031201",
+            "name": "Totora"
+          }
+        ]
+      },
+      {
+        "code": "0313",
+        "name": "Mizque",
+        "municipalities": [
+          {
+            "code": "031303",
+            "name": "Alalay"
+          },
+          {
+            "code": "031301",
+            "name": "Mizque"
+          },
+          {
+            "code": "031304",
+            "name": "TIOC-Raqaypampa"
+          },
+          {
+            "code": "031302",
+            "name": "Vila Vila"
+          }
+        ]
+      },
+      {
+        "code": "0314",
+        "name": "Punata",
+        "municipalities": [
+          {
+            "code": "031401",
+            "name": "Punata"
+          },
+          {
+            "code": "031403",
+            "name": "San Benito"
+          },
+          {
+            "code": "031404",
+            "name": "Tacachi"
+          },
+          {
+            "code": "031405",
+            "name": "Villa Gualberto Villarroel"
+          },
+          {
+            "code": "031402",
+            "name": "Villa Rivero"
+          }
+        ]
+      },
+      {
+        "code": "0315",
+        "name": "Bolívar",
+        "municipalities": [
+          {
+            "code": "031501",
+            "name": "Bolívar"
+          }
+        ]
+      },
+      {
+        "code": "0316",
+        "name": "Tiraque",
+        "municipalities": [
+          {
+            "code": "031602",
+            "name": "Shinahota"
+          },
+          {
+            "code": "031601",
+            "name": "Tiraque"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "04",
+    "name": "Oruro",
+    "provinces": [
+      {
+        "code": "0401",
+        "name": "Cercado",
+        "municipalities": [
+          {
+            "code": "040102",
+            "name": "Caracollo"
+          },
+          {
+            "code": "040103",
+            "name": "El Choro"
+          },
+          {
+            "code": "040101",
+            "name": "Oruro"
+          },
+          {
+            "code": "040104",
+            "name": "Paria"
+          }
+        ]
+      },
+      {
+        "code": "0402",
+        "name": "Abaroa",
+        "municipalities": [
+          {
+            "code": "040201",
+            "name": "Challapata"
+          },
+          {
+            "code": "040202",
+            "name": "Santuario de Quillacas"
+          }
+        ]
+      },
+      {
+        "code": "0403",
+        "name": "Carangas",
+        "municipalities": [
+          {
+            "code": "040302",
+            "name": "Choquecota"
+          },
+          {
+            "code": "040301",
+            "name": "Corque"
+          }
+        ]
+      },
+      {
+        "code": "0404",
+        "name": "Sajama",
+        "municipalities": [
+          {
+            "code": "040401",
+            "name": "Curahuara de Carangas"
+          },
+          {
+            "code": "040402",
+            "name": "Turco"
+          }
+        ]
+      },
+      {
+        "code": "0405",
+        "name": "Litoral",
+        "municipalities": [
+          {
+            "code": "040503",
+            "name": "Cruz de Machacamarca"
+          },
+          {
+            "code": "040502",
+            "name": "Escara"
+          },
+          {
+            "code": "040505",
+            "name": "Esmeralda"
+          },
+          {
+            "code": "040501",
+            "name": "Huachacalla"
+          },
+          {
+            "code": "040504",
+            "name": "Yunguyo del Litoral"
+          }
+        ]
+      },
+      {
+        "code": "0406",
+        "name": "Poopó",
+        "municipalities": [
+          {
+            "code": "040603",
+            "name": "Antequera"
+          },
+          {
+            "code": "040602",
+            "name": "Pazña"
+          },
+          {
+            "code": "040601",
+            "name": "Poopó"
+          }
+        ]
+      },
+      {
+        "code": "0407",
+        "name": "Pantaleón Dalence",
+        "municipalities": [
+          {
+            "code": "040701",
+            "name": "Huanuni"
+          },
+          {
+            "code": "040702",
+            "name": "Machacamarca"
+          }
+        ]
+      },
+      {
+        "code": "0408",
+        "name": "Ladislao Cabrera",
+        "municipalities": [
+          {
+            "code": "040802",
+            "name": "Pampa Aullagas"
+          },
+          {
+            "code": "040801",
+            "name": "Salinas de Garci Mendoza (Autonomía Indígena Originario Campesina de Salinas)"
+          }
+        ]
+      },
+      {
+        "code": "0409",
+        "name": "Sabaya",
+        "municipalities": [
+          {
+            "code": "040902",
+            "name": "Coipasa"
+          },
+          {
+            "code": "040901",
+            "name": "Sabaya"
+          },
+          {
+            "code": "040903",
+            "name": "Uru Chipaya (Nación Originaria Uru Chipaya)"
+          }
+        ]
+      },
+      {
+        "code": "0410",
+        "name": "Saucarí",
+        "municipalities": [
+          {
+            "code": "041001",
+            "name": "Toledo"
+          }
+        ]
+      },
+      {
+        "code": "0411",
+        "name": "Tomás Barrón",
+        "municipalities": [
+          {
+            "code": "041101",
+            "name": "Eucaliptus"
+          }
+        ]
+      },
+      {
+        "code": "0412",
+        "name": "Sur Carangas",
+        "municipalities": [
+          {
+            "code": "041201",
+            "name": "Andamarca"
+          },
+          {
+            "code": "041202",
+            "name": "Belén de Andamarca"
+          }
+        ]
+      },
+      {
+        "code": "0413",
+        "name": "San Pedro de Totora",
+        "municipalities": [
+          {
+            "code": "041301",
+            "name": "Totora"
+          }
+        ]
+      },
+      {
+        "code": "0414",
+        "name": "Sebastián Pagador",
+        "municipalities": [
+          {
+            "code": "041401",
+            "name": "Santiago de Huari"
+          }
+        ]
+      },
+      {
+        "code": "0415",
+        "name": "Mejillones",
+        "municipalities": [
+          {
+            "code": "041503",
+            "name": "Carangas"
+          },
+          {
+            "code": "041501",
+            "name": "La Rivera"
+          },
+          {
+            "code": "041502",
+            "name": "Todos Santos"
+          }
+        ]
+      },
+      {
+        "code": "0416",
+        "name": "Nor Carangas",
+        "municipalities": [
+          {
+            "code": "041601",
+            "name": "Santiago de Huayllamarca"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "05",
+    "name": "Potosí",
+    "provinces": [
+      {
+        "code": "0501",
+        "name": "Tomás Frías",
+        "municipalities": [
+          {
+            "code": "050101",
+            "name": "Potosí"
+          },
+          {
+            "code": "050102",
+            "name": "Tinguipaya"
+          },
+          {
+            "code": "050104",
+            "name": "Urmiri"
+          },
+          {
+            "code": "050103",
+            "name": "Yocalla"
+          }
+        ]
+      },
+      {
+        "code": "0502",
+        "name": "Rafael Bustillo",
+        "municipalities": [
+          {
+            "code": "050202",
+            "name": "Chayanta"
+          },
+          {
+            "code": "050204",
+            "name": "Chuquihuta Ayllu Jucumani"
+          },
+          {
+            "code": "050203",
+            "name": "Llallagua"
+          },
+          {
+            "code": "050201",
+            "name": "Uncía"
+          }
+        ]
+      },
+      {
+        "code": "0503",
+        "name": "Cornelio Saavedra",
+        "municipalities": [
+          {
+            "code": "050301",
+            "name": "Betanzos"
+          },
+          {
+            "code": "050302",
+            "name": "Chaquí"
+          },
+          {
+            "code": "050303",
+            "name": "Tacobamba"
+          }
+        ]
+      },
+      {
+        "code": "0504",
+        "name": "Chayanta",
+        "municipalities": [
+          {
+            "code": "050401",
+            "name": "Colquechaca"
+          },
+          {
+            "code": "050404",
+            "name": "Ocurí"
+          },
+          {
+            "code": "050403",
+            "name": "Pocoata"
+          },
+          {
+            "code": "050402",
+            "name": "Ravelo"
+          },
+          {
+            "code": "050405",
+            "name": "San Pedro de Macha"
+          }
+        ]
+      },
+      {
+        "code": "0505",
+        "name": "Charcas",
+        "municipalities": [
+          {
+            "code": "050501",
+            "name": "San Pedro"
+          },
+          {
+            "code": "050502",
+            "name": "Toro Toro"
+          }
+        ]
+      },
+      {
+        "code": "0506",
+        "name": "Nor Chichas",
+        "municipalities": [
+          {
+            "code": "050601",
+            "name": "Cotagaita"
+          },
+          {
+            "code": "050602",
+            "name": "Vitichi"
+          }
+        ]
+      },
+      {
+        "code": "0507",
+        "name": "Alonso de Ibáñez",
+        "municipalities": [
+          {
+            "code": "050702",
+            "name": "Caripuyo"
+          },
+          {
+            "code": "050701",
+            "name": "Sacaca"
+          }
+        ]
+      },
+      {
+        "code": "0508",
+        "name": "Sur Chichas",
+        "municipalities": [
+          {
+            "code": "050802",
+            "name": "Atocha"
+          },
+          {
+            "code": "050801",
+            "name": "Tupiza"
+          }
+        ]
+      },
+      {
+        "code": "0509",
+        "name": "Nor Lípez",
+        "municipalities": [
+          {
+            "code": "050901",
+            "name": "Colcha \"K\""
+          },
+          {
+            "code": "050902",
+            "name": "San Pedro de Quemes"
+          }
+        ]
+      },
+      {
+        "code": "0510",
+        "name": "Sur Lípez",
+        "municipalities": [
+          {
+            "code": "051002",
+            "name": "Mojinete"
+          },
+          {
+            "code": "051003",
+            "name": "San Antonio de Esmoruco"
+          },
+          {
+            "code": "051001",
+            "name": "San Pablo"
+          }
+        ]
+      },
+      {
+        "code": "0511",
+        "name": "José María Linares",
+        "municipalities": [
+          {
+            "code": "051102",
+            "name": "Caiza \"D\""
+          },
+          {
+            "code": "051103",
+            "name": "Ckochas"
+          },
+          {
+            "code": "051101",
+            "name": "Puna"
+          }
+        ]
+      },
+      {
+        "code": "0512",
+        "name": "Antonio Quijarro",
+        "municipalities": [
+          {
+            "code": "051203",
+            "name": "Porco"
+          },
+          {
+            "code": "051204",
+            "name": "TIOC-Jatun Ayllu Yura"
+          },
+          {
+            "code": "051202",
+            "name": "Tomave"
+          },
+          {
+            "code": "051201",
+            "name": "Uyuni"
+          }
+        ]
+      },
+      {
+        "code": "0513",
+        "name": "General Bernardino Bilbao",
+        "municipalities": [
+          {
+            "code": "051302",
+            "name": "Acasio"
+          },
+          {
+            "code": "051301",
+            "name": "Arampampa"
+          }
+        ]
+      },
+      {
+        "code": "0514",
+        "name": "Daniel Campos",
+        "municipalities": [
+          {
+            "code": "051401",
+            "name": "Llica"
+          },
+          {
+            "code": "051402",
+            "name": "Tahua"
+          }
+        ]
+      },
+      {
+        "code": "0515",
+        "name": "Modesto Omiste",
+        "municipalities": [
+          {
+            "code": "051501",
+            "name": "Villazón"
+          }
+        ]
+      },
+      {
+        "code": "0516",
+        "name": "Enrique Baldivieso",
+        "municipalities": [
+          {
+            "code": "051601",
+            "name": "San Agustín"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "06",
+    "name": "Tarija",
+    "provinces": [
+      {
+        "code": "0601",
+        "name": "Cercado",
+        "municipalities": [
+          {
+            "code": "060101",
+            "name": "Tarija"
+          }
+        ]
+      },
+      {
+        "code": "0602",
+        "name": "Arce",
+        "municipalities": [
+          {
+            "code": "060202",
+            "name": "Bermejo"
+          },
+          {
+            "code": "060201",
+            "name": "Padcaya"
+          }
+        ]
+      },
+      {
+        "code": "0603",
+        "name": "Gran Chaco",
+        "municipalities": [
+          {
+            "code": "060302",
+            "name": "Caraparí"
+          },
+          {
+            "code": "060303",
+            "name": "Villa Montes"
+          },
+          {
+            "code": "060301",
+            "name": "Yacuiba"
+          }
+        ]
+      },
+      {
+        "code": "0604",
+        "name": "Avilez",
+        "municipalities": [
+          {
+            "code": "060401",
+            "name": "Uriondo"
+          },
+          {
+            "code": "060402",
+            "name": "Yunchará"
+          }
+        ]
+      },
+      {
+        "code": "0605",
+        "name": "Méndez",
+        "municipalities": [
+          {
+            "code": "060502",
+            "name": "El Puente"
+          },
+          {
+            "code": "060501",
+            "name": "San Lorenzo"
+          }
+        ]
+      },
+      {
+        "code": "0606",
+        "name": "O'Connor",
+        "municipalities": [
+          {
+            "code": "060601",
+            "name": "Entre Ríos"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "07",
+    "name": "Santa Cruz",
+    "provinces": [
+      {
+        "code": "0701",
+        "name": "Andrés Ibáñez",
+        "municipalities": [
+          {
+            "code": "070102",
+            "name": "Cotoca"
+          },
+          {
+            "code": "070105",
+            "name": "El Torno"
+          },
+          {
+            "code": "070104",
+            "name": "La Guardia"
+          },
+          {
+            "code": "070103",
+            "name": "Porongo"
+          },
+          {
+            "code": "070101",
+            "name": "Santa Cruz de la Sierra"
+          }
+        ]
+      },
+      {
+        "code": "0702",
+        "name": "Warnes",
+        "municipalities": [
+          {
+            "code": "070202",
+            "name": "Okinawa Uno"
+          },
+          {
+            "code": "070201",
+            "name": "Warnes"
+          }
+        ]
+      },
+      {
+        "code": "0703",
+        "name": "Velasco",
+        "municipalities": [
+          {
+            "code": "070301",
+            "name": "San Ignacio"
+          },
+          {
+            "code": "070302",
+            "name": "San Miguel"
+          },
+          {
+            "code": "070303",
+            "name": "San Rafael"
+          }
+        ]
+      },
+      {
+        "code": "0704",
+        "name": "Ichilo",
+        "municipalities": [
+          {
+            "code": "070401",
+            "name": "Buena Vista"
+          },
+          {
+            "code": "070402",
+            "name": "San Carlos"
+          },
+          {
+            "code": "070404",
+            "name": "San Juan"
+          },
+          {
+            "code": "070403",
+            "name": "Yapacaní"
+          }
+        ]
+      },
+      {
+        "code": "0705",
+        "name": "Chiquitos",
+        "municipalities": [
+          {
+            "code": "070502",
+            "name": "Pailón"
+          },
+          {
+            "code": "070503",
+            "name": "Roboré"
+          },
+          {
+            "code": "070501",
+            "name": "San José"
+          }
+        ]
+      },
+      {
+        "code": "0706",
+        "name": "Sara",
+        "municipalities": [
+          {
+            "code": "070603",
+            "name": "Colpa Bélgica"
+          },
+          {
+            "code": "070601",
+            "name": "Portachuelo"
+          },
+          {
+            "code": "070602",
+            "name": "Santa Rosa"
+          }
+        ]
+      },
+      {
+        "code": "0707",
+        "name": "Cordillera",
+        "municipalities": [
+          {
+            "code": "070707",
+            "name": "Boyuibe"
+          },
+          {
+            "code": "070703",
+            "name": "Cabezas"
+          },
+          {
+            "code": "070706",
+            "name": "Camiri"
+          },
+          {
+            "code": "070702",
+            "name": "Charagua (Autonomía Guaraní Charagua Iyambae)"
+          },
+          {
+            "code": "070704",
+            "name": "Cuevo"
+          },
+          {
+            "code": "070705",
+            "name": "Gutiérrez (Autonomía Indígena Kereimba Iyaambae)"
+          },
+          {
+            "code": "070701",
+            "name": "Lagunillas"
+          }
+        ]
+      },
+      {
+        "code": "0708",
+        "name": "Valle Grande",
+        "municipalities": [
+          {
+            "code": "070803",
+            "name": "Moromoro"
+          },
+          {
+            "code": "070804",
+            "name": "Postrervalle"
+          },
+          {
+            "code": "070805",
+            "name": "Pucará"
+          },
+          {
+            "code": "070802",
+            "name": "Trigal"
+          },
+          {
+            "code": "070801",
+            "name": "Vallegrande"
+          }
+        ]
+      },
+      {
+        "code": "0709",
+        "name": "Florida",
+        "municipalities": [
+          {
+            "code": "070903",
+            "name": "Mairana"
+          },
+          {
+            "code": "070902",
+            "name": "Pampagrande"
+          },
+          {
+            "code": "070904",
+            "name": "Quirusillas"
+          },
+          {
+            "code": "070901",
+            "name": "Samaipata"
+          }
+        ]
+      },
+      {
+        "code": "0710",
+        "name": "Obispo Santisteban",
+        "municipalities": [
+          {
+            "code": "071004",
+            "name": "Fernández Alonso"
+          },
+          {
+            "code": "071002",
+            "name": "General Saavedra"
+          },
+          {
+            "code": "071003",
+            "name": "Mineros"
+          },
+          {
+            "code": "071001",
+            "name": "Montero"
+          },
+          {
+            "code": "071005",
+            "name": "San Pedro"
+          }
+        ]
+      },
+      {
+        "code": "0711",
+        "name": "Ñuflo de Chávez",
+        "municipalities": [
+          {
+            "code": "071101",
+            "name": "Concepción"
+          },
+          {
+            "code": "071106",
+            "name": "Cuatro Cañadas"
+          },
+          {
+            "code": "071104",
+            "name": "San Antonio de Lomerio"
+          },
+          {
+            "code": "071102",
+            "name": "San Javier"
+          },
+          {
+            "code": "071103",
+            "name": "San Julián"
+          },
+          {
+            "code": "071105",
+            "name": "San Ramón"
+          }
+        ]
+      },
+      {
+        "code": "0712",
+        "name": "Ángel Sandoval",
+        "municipalities": [
+          {
+            "code": "071201",
+            "name": "San Matías"
+          }
+        ]
+      },
+      {
+        "code": "0713",
+        "name": "Manuel María Caballero",
+        "municipalities": [
+          {
+            "code": "071301",
+            "name": "Comarapa"
+          },
+          {
+            "code": "071302",
+            "name": "Saipina"
+          }
+        ]
+      },
+      {
+        "code": "0714",
+        "name": "Germán Busch",
+        "municipalities": [
+          {
+            "code": "071403",
+            "name": "El Carmen Rivero Tórrez"
+          },
+          {
+            "code": "071402",
+            "name": "Puerto Quijarro"
+          },
+          {
+            "code": "071401",
+            "name": "Puerto Suárez"
+          }
+        ]
+      },
+      {
+        "code": "0715",
+        "name": "Guarayos",
+        "municipalities": [
+          {
+            "code": "071501",
+            "name": "Ascención de Guarayos"
+          },
+          {
+            "code": "071503",
+            "name": "El Puente"
+          },
+          {
+            "code": "071502",
+            "name": "Urubichá"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "08",
+    "name": "Beni",
+    "provinces": [
+      {
+        "code": "0801",
+        "name": "Cercado",
+        "municipalities": [
+          {
+            "code": "080102",
+            "name": "San Javier"
+          },
+          {
+            "code": "080101",
+            "name": "Trinidad"
+          }
+        ]
+      },
+      {
+        "code": "0802",
+        "name": "Vaca Diez",
+        "municipalities": [
+          {
+            "code": "080202",
+            "name": "Guayaramerín"
+          },
+          {
+            "code": "080201",
+            "name": "Riberalta"
+          }
+        ]
+      },
+      {
+        "code": "0803",
+        "name": "General José Ballivián",
+        "municipalities": [
+          {
+            "code": "080304",
+            "name": "Puerto Menor de Rurrenabaque"
+          },
+          {
+            "code": "080301",
+            "name": "Reyes"
+          },
+          {
+            "code": "080302",
+            "name": "San Borja"
+          },
+          {
+            "code": "080303",
+            "name": "Santa Rosa"
+          }
+        ]
+      },
+      {
+        "code": "0804",
+        "name": "Yacuma",
+        "municipalities": [
+          {
+            "code": "080402",
+            "name": "Exaltación"
+          },
+          {
+            "code": "080401",
+            "name": "Santa Ana"
+          }
+        ]
+      },
+      {
+        "code": "0805",
+        "name": "Moxos",
+        "municipalities": [
+          {
+            "code": "080501",
+            "name": "San Ignacio"
+          }
+        ]
+      },
+      {
+        "code": "0806",
+        "name": "Marbán",
+        "municipalities": [
+          {
+            "code": "080601",
+            "name": "Loreto"
+          },
+          {
+            "code": "080602",
+            "name": "San Andrés"
+          }
+        ]
+      },
+      {
+        "code": "0807",
+        "name": "Mamoré",
+        "municipalities": [
+          {
+            "code": "080703",
+            "name": "Puerto Siles"
+          },
+          {
+            "code": "080701",
+            "name": "San Joaquín"
+          },
+          {
+            "code": "080702",
+            "name": "San Ramón"
+          }
+        ]
+      },
+      {
+        "code": "0808",
+        "name": "Iténez",
+        "municipalities": [
+          {
+            "code": "080802",
+            "name": "Baures"
+          },
+          {
+            "code": "080803",
+            "name": "Huacaraje"
+          },
+          {
+            "code": "080801",
+            "name": "Magdalena"
+          }
+        ]
+      },
+      {
+        "code": "0809",
+        "name": "Territorio Indígena Multiétnico",
+        "municipalities": [
+          {
+            "code": "080901",
+            "name": "TIOC-Territorio Indígena Multiétnico"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "code": "09",
+    "name": "Pando",
+    "provinces": [
+      {
+        "code": "0901",
+        "name": "Nicolás Suárez",
+        "municipalities": [
+          {
+            "code": "090104",
+            "name": "Bella Flor"
+          },
+          {
+            "code": "090103",
+            "name": "Bolpebra"
+          },
+          {
+            "code": "090101",
+            "name": "Cobija"
+          },
+          {
+            "code": "090102",
+            "name": "Porvenir"
+          }
+        ]
+      },
+      {
+        "code": "0902",
+        "name": "Manuripi",
+        "municipalities": [
+          {
+            "code": "090203",
+            "name": "Filadelfia"
+          },
+          {
+            "code": "090201",
+            "name": "Puerto Rico"
+          },
+          {
+            "code": "090202",
+            "name": "San Pedro"
+          }
+        ]
+      },
+      {
+        "code": "0903",
+        "name": "Madre de Dios",
+        "municipalities": [
+          {
+            "code": "090301",
+            "name": "Puerto Gonzalo Moreno"
+          },
+          {
+            "code": "090302",
+            "name": "San Lorenzo"
+          },
+          {
+            "code": "090303",
+            "name": "Sena"
+          }
+        ]
+      },
+      {
+        "code": "0904",
+        "name": "Abuná",
+        "municipalities": [
+          {
+            "code": "090402",
+            "name": "Ingavi"
+          },
+          {
+            "code": "090401",
+            "name": "Santa Rosa"
+          }
+        ]
+      },
+      {
+        "code": "0905",
+        "name": "Federico Román",
+        "municipalities": [
+          {
+            "code": "090501",
+            "name": "Nueva Esperanza"
+          },
+          {
+            "code": "090503",
+            "name": "Santos Mercado"
+          },
+          {
+            "code": "090502",
+            "name": "Villa Nueva"
+          }
+        ]
+      }
+    ]
+  }
+]

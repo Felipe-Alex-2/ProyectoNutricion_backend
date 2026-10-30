@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.activity_log import ActivityLog
-from app.schemas.user import UserResponse, UserUpdate, ProfileUpdate
+from app.schemas.user import UserResponse, UserUpdate, ProfileUpdate, WorkspaceUpdate
 from app.core.authorization import require_patient_access, require_tenant
 from app.schemas.common import MessageResponse
 from app.services.user_service import UserService
@@ -12,6 +12,28 @@ from app.api.deps import get_current_user
 from app.core.exceptions import ConflictException, NotFoundException, ForbiddenException
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+@router.get('/me/workspace-options')
+def workspace_options(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.tenant import Tenant
+    from app.models.company import Branch
+    if user.role_id == 'CLIENTE': raise ForbiddenException('El cliente no cambia de espacio de trabajo.')
+    companies = db.query(Tenant).filter(Tenant.is_active.is_(True))
+    if user.role_id != 'SUPERADMIN': companies = companies.filter(Tenant.id == user.tenant_id)
+    rows = companies.order_by(Tenant.name).all()
+    branches = db.query(Branch).filter(Branch.tenant_id.in_([c.id for c in rows]), Branch.is_active.is_(True)).order_by(Branch.name).all()
+    return {'companies':[{'id':c.id,'name':c.name} for c in rows], 'branches':[{'id':b.id,'tenant_id':b.tenant_id,'name':b.name} for b in branches], 'can_change_company':user.role_id == 'SUPERADMIN'}
+
+
+@router.put('/me/workspace', response_model=UserResponse)
+def change_workspace(data: WorkspaceUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.core.workspace import selection
+    scope = selection(db, user, data.tenant_id, data.branch_id, explicit=True)
+    user.workspace_tenant_id = scope.tenant_id if user.role_id == 'SUPERADMIN' else None
+    user.workspace_branch_id = scope.branch_id
+    db.add(user); db.commit(); db.refresh(user)
+    return user
 
 
 @router.get(

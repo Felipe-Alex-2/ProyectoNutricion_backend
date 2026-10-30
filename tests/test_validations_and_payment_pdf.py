@@ -58,7 +58,7 @@ def test_tenant_validations(client, auth_context, db_session):
     tenant_code = "VALTEST1"
     res_ok = client.post(
         "/api/v1/tenants",
-        json={"name": tenant_name, "code": tenant_code,"administrator_id":"candidate1"},
+        json={"name": tenant_name, "code": tenant_code,"administrator_id":"candidate1","department_code":"01","initial_province_code":"0101","initial_municipality_code":"010101"},
         headers=headers,
     )
     assert res_ok.status_code == 201
@@ -66,7 +66,7 @@ def test_tenant_validations(client, auth_context, db_session):
     # 3. Intentar crear duplicado con el mismo nombre
     res_dup = client.post(
         "/api/v1/tenants",
-        json={"name": tenant_name, "code": "VALTEST2","administrator_id":"candidate2"},
+        json={"name": tenant_name, "code": "VALTEST2","administrator_id":"candidate2","department_code":"01","initial_province_code":"0101","initial_municipality_code":"010101"},
         headers=headers,
     )
     assert res_dup.status_code == 409

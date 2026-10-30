@@ -16,6 +16,9 @@ def require_role(user: User, roles: set[str]) -> None:
 
 def require_tenant(user: User, tenant_id: str | None) -> None:
     if user.role_id == "SUPERADMIN":
+        selected = getattr(user, '_workspace_company_id', None)
+        if selected and tenant_id and tenant_id != selected:
+            raise ForbiddenException('El recurso no pertenece a la empresa activa.')
         return
     if not user.tenant_id or not tenant_id or user.tenant_id != tenant_id:
         raise ForbiddenException("El recurso no pertenece a tu organización.")
@@ -30,7 +33,7 @@ def require_user_management(actor: User, target: User | None = None) -> None:
 
 
 def require_patient_access(db: Session, actor: User, patient_id: str, *, allow_self: bool = False) -> User:
-    patient = db.get(User, patient_id)
+    patient = db.query(User).filter(User.id == patient_id).first()
     if patient is None:
         raise NotFoundException("Paciente no encontrado.")
     if allow_self and actor.id == patient.id:

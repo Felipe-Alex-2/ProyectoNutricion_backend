@@ -99,7 +99,7 @@ def complete_appointment(appointment_id: str, db: Session = Depends(get_db), cur
     from app.models.appointment import Appointment
     from datetime import datetime, timezone
     require_role(current_user, STAFF_ROLES)
-    appointment = db.get(Appointment, appointment_id)
+    appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     if not appointment: raise NotFoundException('Cita no encontrada.')
     require_tenant(current_user, appointment.tenant_id)
     if current_user.role_id == 'NUTRICIONISTA' and appointment.nutritionist_id != current_user.id: raise ForbiddenException('La cita pertenece a otro especialista.')

@@ -26,6 +26,13 @@ class ReportAnalyticsService:
     def scope(db, actor, req):
         require_role(actor,STAFF_ROLES)
         requested=set(req.tenant_ids or ([req.tenant_id] if req.tenant_id else []))
+        from app.core.workspace import current
+        workspace = current(db)
+        if workspace and workspace.tenant_id:
+            if requested and requested != {workspace.tenant_id}: raise ForbiddenException('Cambia al espacio global para comparar empresas.')
+            requested = {workspace.tenant_id}
+            if workspace.branch_id and req.branch_ids and set(req.branch_ids) != {workspace.branch_id}:
+                raise ForbiddenException('El reporte debe pertenecer a la sucursal activa.')
         if req.tenant_id and requested and req.tenant_id not in requested:
             raise BadRequestException('El filtro de empresa no coincide con las empresas solicitadas.')
         if actor.role_id!='SUPERADMIN':
@@ -36,6 +43,7 @@ class ReportAnalyticsService:
         if requested and {c.id for c in companies}!=requested:raise BadRequestException('Alguna empresa seleccionada no existe.')
         company_ids=[c.id for c in companies]
         branches=db.query(Branch).filter(Branch.tenant_id.in_(company_ids)).all()
+        if workspace and workspace.branch_id: branches = [b for b in branches if b.id == workspace.branch_id]
         if req.branch_ids and not set(req.branch_ids)<={b.id for b in branches}:raise ForbiddenException('Alguna sucursal no pertenece al alcance autorizado.')
         return companies,branches
 
@@ -47,11 +55,7 @@ class ReportAnalyticsService:
         q=db.query(model).filter(model.tenant_id.in_([c.id for c in companies]))
         if model is User:
             q=q.filter(User.role_id=='CLIENTE');branch_col=User.branch_id
-        elif model in (Payment,Appointment):branch_col=model.branch_id
-        else:
-            person=aliased(User)
-            owner=model.patient_id if hasattr(model,'patient_id') else model.created_by if hasattr(model,'created_by') else model.user_id
-            q=q.outerjoin(person,and_(person.id==owner,person.tenant_id==model.tenant_id));branch_col=person.branch_id
+        else:branch_col=model.branch_id
         if req.branch_ids:q=q.filter(branch_col.in_(req.branch_ids))
         if model is ActivityLog:
             from app.services.audit_policy import MUTATION_WORDS, NON_MUTATION_WORDS
@@ -185,7 +189,7 @@ class ReportAnalyticsService:
         for f in req.filters:notes.append(f'Filtro: {f.field} {f.operator} {f.value}.')
         if model is Payment and not req.status:notes.append('Se incluyen cobros de todos los estados. Para ingresos efectivamente cobrados selecciona COMPLETED.')
         if model is Payment and req.metric in ('sum','average'):notes.append('Los importes se separan por moneda; no se suman monedas distintas.')
-        if model not in (User,Payment,Appointment) and req.group_by=='branch':notes.append('La sucursal se obtiene de la cuenta asociada; estos registros no guardan sucursal histórica propia.')
+        if req.group_by=='branch':notes.append('La sucursal corresponde a la atribución guardada de cada registro.')
         if any(r.get('branch_name')=='Sin sucursal asignada' for r in rows):notes.append('Los registros sin sucursal se muestran por separado; no se atribuyen a una sucursal arbitraria.')
         if total>len(rows):notes.append(f'Mostrando {len(rows)} de {total} grupos; los cálculos incluyen todos los registros autorizados.')
         summary=f'{total} grupos encontrados.' if groups else f'{metric_label}: {rows[0]["value"] if rows else 0}.'
