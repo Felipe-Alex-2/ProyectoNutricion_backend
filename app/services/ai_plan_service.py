@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.clinical import PatientAnamnesis
 from app.models.patient_link import PatientNutritionistLink
 from app.models.ai_nutrition import NutritionalPlan
+from app.models.notification import Notification
 from app.services.gemini_service import GeminiService
 from app.services.expert_system_service import ExpertSystemService
 from app.schemas.ai_nutrition import (
@@ -68,6 +69,7 @@ class AIPlanService:
             carbs_g=carbs_g,
             fats_g=fats_g,
             meals_count=num_meals,
+            goal=custom_goal,
         )
 
         # 3. Aplicar Filtro de Exclusión del Sistema Experto
@@ -79,6 +81,13 @@ class AIPlanService:
             )
             meal.foods = [FoodItem(**f) for f in filtered_foods]
             meal.total_calories = round(sum(f.calories for f in meal.foods), 1)
+            if not meal.foods or meal.total_calories <= 0:
+                raise ValueError('El menú propuesto no cumple las restricciones del paciente. Ajusta la solicitud y vuelve a generar el borrador.')
+
+        proposed_calories = sum(m.total_calories for m in meals)
+        if abs(proposed_calories - daily_kcal) > daily_kcal * .15:
+            calc['requires_special_review'] = True
+            calc['warnings'].append('Las calorías de las comidas difieren del objetivo. Revisar porciones antes de aprobar.')
 
         # 4. Persistir o actualizar plan en estado DRAFT
         existing_draft = (
@@ -98,6 +107,7 @@ class AIPlanService:
             "meals_json": json.dumps([m.model_dump() for m in meals], ensure_ascii=False),
             "requires_special_review": calc["requires_special_review"],
             "clinical_notes": (
+                "Menú propuesto por Gemini IA. Requiere revisión profesional. "
                 f"TMB calculada: {calc['tmb']} kcal (Mifflin-St Jeor). "
                 f"Ajuste metabólico: {calc['adjustment_pct']}%. "
                 + (" ".join(calc["warnings"]) if calc["warnings"] else "")
@@ -137,6 +147,7 @@ class AIPlanService:
         meals: Optional[List[MealItem]] = None,
         clinical_notes: Optional[str] = None,
         status: Optional[str] = None,
+        approved_by: Optional[str] = None,
     ) -> NutritionalPlanResponse:
         """Actualiza valores o comidas de un plan existente (por nutricionista)."""
         plan = db.query(NutritionalPlan).filter(NutritionalPlan.id == plan_id).first()
@@ -159,9 +170,9 @@ class AIPlanService:
         if clinical_notes is not None:
             plan.clinical_notes = clinical_notes
         if status is not None:
-            plan.status = status
             if status == "APPROVED":
-                plan.approved_at = datetime.now(timezone.utc)
+                return cls.approve_plan(db, plan_id, approved_by or plan.nutritionist_id)
+            plan.status = status
 
         db.commit()
         db.refresh(plan)
@@ -180,6 +191,12 @@ class AIPlanService:
             raise ValueError("Plan nutricional no encontrado.")
 
         # Desactivar planes anteriores aprobados para el mismo paciente
+        if plan.status == 'APPROVED':
+            return cls._format_plan_response(plan)
+        if not nutritionist_id:
+            raise ValueError('La aprobación requiere un profesional responsable.')
+        if not json.loads(plan.meals_json or '[]'):
+            raise ValueError('El plan debe incluir comidas antes de asignarlo.')
         for previous in db.query(NutritionalPlan).filter(
             NutritionalPlan.patient_id == plan.patient_id,
             NutritionalPlan.id != plan_id,
@@ -190,6 +207,10 @@ class AIPlanService:
         plan.status = "APPROVED"
         plan.nutritionist_id = nutritionist_id
         plan.approved_at = datetime.now(timezone.utc)
+        db.add(Notification(user_id=plan.patient_id, tenant_id=plan.tenant_id,
+            title='Tu plan nutricional está listo',
+            message='Tu profesional aprobó y asignó tu plan. Consúltalo en Mi plan o Mi nutrición.',
+            type='SISTEMA', reference_id=plan.id, is_read=False))
         db.commit()
         db.refresh(plan)
 
@@ -317,72 +338,42 @@ class AIPlanService:
         carbs_g: float,
         fats_g: float,
         meals_count: int,
+        goal: Optional[str] = None,
     ) -> List[MealItem]:
-        """Genera comidas balanceadas usando Gemini o plantilla clínica estructurada."""
-        if GeminiService.is_configured():
-            prompt = (
-                f"Genera un plan de alimentación diario para un paciente con meta '{anamnesis.goal}'. "
-                f"Calorías totales: {daily_kcal} kcal, Proteína: {protein_g}g, Carbohidratos: {carbs_g}g, Grasas: {fats_g}g. "
-                f"Número de comidas: {meals_count}. "
-                f"Alergias del paciente: {anamnesis.allergies or 'Ninguna'}. "
-                f"Preferencias: {anamnesis.food_preferences or 'Sin restricciones'}. "
-                f"Devuelve estrictamente un JSON con esta estructura exacta:\n"
-                "[\n"
-                "  {\n"
-                '    "meal_name": "Desayuno",\n'
-                '    "time_suggestion": "08:00",\n'
-                '    "foods": [\n'
-                '      {"name": "Huevos revueltos", "portion": "2 unidades", "calories": 140, "protein_g": 12, "carbs_g": 1, "fats_g": 10}\n'
-                "    ],\n"
-                '    "total_calories": 140\n'
-                "  }\n"
-                "]"
-            )
-            raw_json = GeminiService.generate_json(prompt)
-            if isinstance(raw_json, list) and len(raw_json) > 0:
-                try:
-                    return [MealItem(**item) for item in raw_json]
-                except Exception as e:
-                    logger.warning(f"Error parseando comidas devueltas por Gemini ({e}). Usando plantilla clínica.")
+        """Generate a structured AI draft; failures must never masquerade as AI output."""
+        if not GeminiService.is_configured():
+            raise ValueError("Configura GEMINI_API_KEY en el servicio backend para generar planes con IA.")
+        prompt = (
+            f"Genera un plan de alimentación diario para un paciente con meta '{goal or anamnesis.goal}'. "
+            f"Calorías totales: {daily_kcal} kcal, Proteína: {protein_g}g, Carbohidratos: {carbs_g}g, Grasas: {fats_g}g. "
+            f"Número de comidas: {meals_count}. "
+            f"Alergias del paciente: {anamnesis.allergies or 'Ninguna'}. "
+            f"Condiciones clínicas: {anamnesis.pathologies or 'Sin información'}. "
+            f"Preferencias: {anamnesis.food_preferences or 'Sin restricciones'}. "
+            f'Devuelve un objeto JSON con la clave "meals" y esta lista:\n'
+            "[\n"
+            "  {\n"
+            '    "meal_name": "Desayuno",\n'
+            '    "time_suggestion": "08:00",\n'
+            '    "foods": [\n'
+            '      {"name": "Huevos revueltos", "portion": "2 unidades", "calories": 140, "protein_g": 12, "carbs_g": 1, "fats_g": 10}\n'
+            "    ],\n"
+            '    "total_calories": 140\n'
+            "  }\n"
+            "]"
+        )
+        raw_json = GeminiService.generate_json(prompt)
+        if isinstance(raw_json, dict):
+            raw_json = raw_json.get("meals", [])
+        if isinstance(raw_json, list) and len(raw_json) == meals_count:
+            try:
+                meals = [MealItem(**item) for item in raw_json]
+                if all(meal.foods for meal in meals):
+                    return meals
+            except (ValueError, TypeError):
+                logger.warning('La IA devolvió comidas con una estructura inválida.')
 
-        # Fallback clínico estructurado
-        meal_names = ["Desayuno", "Almuerzo", "Merienda", "Cena", "Snack Post-Entreno"][:meals_count]
-        times = ["08:00", "13:00", "17:00", "20:30", "11:00"][:meals_count]
-
-        cal_per_meal = round(daily_kcal / meals_count, 1)
-        prot_per_meal = round(protein_g / meals_count, 1)
-        carb_per_meal = round(carbs_g / meals_count, 1)
-        fat_per_meal = round(fats_g / meals_count, 1)
-
-        result = []
-        templates = [
-            ("Huevos revueltos o tofu salteado", "2 unid / 120g", 0.5 * cal_per_meal, prot_per_meal * 0.7, 2.0, fat_per_meal * 0.8),
-            ("Avena integral con fruta fresca", "1 bowl (60g)", 0.5 * cal_per_meal, prot_per_meal * 0.3, carb_per_meal * 0.9, fat_per_meal * 0.2),
-            ("Pechuga de pollo a la plancha / Pescado blanco", "160g", 0.5 * cal_per_meal, prot_per_meal * 0.8, 0.0, fat_per_meal * 0.3),
-            ("Arroz integral o batata asada con ensalada mixta", "1 taza", 0.5 * cal_per_meal, prot_per_meal * 0.2, carb_per_meal, fat_per_meal * 0.7),
-            ("Yogur natural (o vegetal deslactosado) con chía", "1 vaso", cal_per_meal, prot_per_meal, carb_per_meal, fat_per_meal),
-        ]
-
-        for i, name in enumerate(meal_names):
-            t1 = templates[i % len(templates)]
-            f1 = FoodItem(
-                name=t1[0],
-                portion=t1[1],
-                calories=round(t1[2], 1),
-                protein_g=round(t1[3], 1),
-                carbs_g=round(t1[4], 1),
-                fats_g=round(t1[5], 1),
-            )
-            result.append(
-                MealItem(
-                    meal_name=name,
-                    time_suggestion=times[i],
-                    foods=[f1],
-                    total_calories=f1.calories,
-                )
-            )
-
-        return result
+        raise ValueError("La IA no devolvió un menú válido. Intenta nuevamente; no se ha guardado un plan generado.")
 
     @classmethod
     def _format_plan_response(cls, plan: NutritionalPlan) -> NutritionalPlanResponse:

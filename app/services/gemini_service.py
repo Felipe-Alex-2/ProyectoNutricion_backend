@@ -76,7 +76,7 @@ class GeminiService:
                         if parts:
                             return parts[0].get("text", "")
             except Exception as e:
-                logger.warning(f"Error llamando a {model_to_try} ({e}). Probando siguiente...")
+                logger.warning("Error llamando a %s (%s). Probando siguiente...", model_to_try, type(e).__name__)
                 continue
 
         return cls._fallback_text_response(prompt)
@@ -197,8 +197,8 @@ class GeminiService:
                 last_error = f"HTTP {e.code}: {model_to_try}"
                 continue
             except Exception as e:
-                logger.warning(f"Error de conexion con {model_to_try}: {e}")
-                last_error = str(e)
+                logger.warning("Error de conexión con %s (%s)", model_to_try, type(e).__name__)
+                last_error = 'servicio temporalmente no disponible'
                 continue
 
         raise ValueError(f"No se pudo analizar la imagen con los modelos de IA disponibles ({last_error}).")
