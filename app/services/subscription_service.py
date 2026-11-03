@@ -142,6 +142,7 @@ class SubscriptionService:
         tenant_id: Optional[str],
         plan_name: str,
         user_id: Optional[str] = None,
+        checkout_return_url: Optional[str] = None,
     ) -> dict:
         """Create a PayPal order and a PENDING subscription row."""
         plan_name_upper = plan_name.upper()
@@ -158,6 +159,9 @@ class SubscriptionService:
             frontend_url = settings.FRONTEND_URL.rstrip("/")
             return_url = f"{frontend_url}/paypal-return"
             cancel_url = f"{frontend_url}/dashboard"
+
+        if checkout_return_url:
+            return_url = cancel_url = checkout_return_url
 
         # Call PayPal
         paypal_result = PayPalService.create_order(

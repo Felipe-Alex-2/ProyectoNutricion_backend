@@ -52,7 +52,9 @@ def test_accept_creates_pending_charge_and_cash_confirms_once(client, db_session
     assert db_session.get(Appointment,'appointment').status=='CONFIRMED'
     assert client.get('/api/v1/my-payments',headers=auth('other')).json()==[]
     assert client.get(f'/api/v1/payments/{charge.id}/pdf',headers=auth('other')).status_code==403
-    assert client.get(f'/api/v1/payments/{charge.id}/pdf',headers=auth('patient')).status_code==200
+    assert client.get(f'/api/v1/payments/{charge.id}/pdf',headers=auth('patient')).status_code==403
+    assert client.get(f'/api/v1/payments/{charge.id}/pdf',headers=auth('admin')).status_code==200
+    assert client.get('/api/v1/my-payments',headers=auth('patient')).json()==[]
 
 
 def completed(amount):
@@ -62,29 +64,31 @@ def completed(amount):
 def test_verified_topup_wallet_payment_and_duplicate_capture(client, db_session, setup, monkeypatch):
     monkeypatch.setattr(PayPalService,'create_order',staticmethod(lambda **kw: {'order_id':'ORDER','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=ORDER'}))
     monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: {'status':'APPROVED'}))
-    monkeypatch.setattr(PayPalService,'capture_order',staticmethod(lambda order: {'raw':completed(10)}))
+    monkeypatch.setattr(PayPalService,'capture_order',staticmethod(lambda order: {'raw':completed(5)}))
     headers={**auth('patient'),'Idempotency-Key':'topup-test-01'}
     assert client.post('/api/v1/wallet/topups',headers=headers,json={'amount':7}).status_code==422
-    topup=client.post('/api/v1/wallet/topups',headers=headers,json={'amount':10})
+    topup=client.post('/api/v1/wallet/topups',headers=headers,json={'amount':5})
     assert topup.status_code==200,topup.text
     assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==0
     for _ in range(2):
         response=client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'ORDER'})
         assert response.status_code==200,response.text
-    assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==10
+    assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==5
     assert db_session.query(WalletMovement).count()==1
     accept(client)
     for _ in range(2):
         paid=client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'WALLET'})
         assert paid.status_code==200,paid.text
-    assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==5
+    assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==0
     assert db_session.query(WalletMovement).count()==2
     assert db_session.get(Appointment,'appointment').status=='CONFIRMED'
     stats=client.get('/api/v1/payments/stats',headers=auth('admin')).json()
-    assert stats['total_collected']==5
+    assert stats['total_collected']==0
+    assert stats['total_count']==0
+    assert client.get('/api/v1/payments',headers=auth('admin')).json()==[]
     report=client.post('/api/v1/reports/query',headers=auth('admin'),json={'entity':'payments','aggregate':True,'metric':'sum','value_field':'amount','group_by':'branch','status':'COMPLETED'})
     assert report.status_code==200,report.text
-    assert report.json()['rows'][0]['value']==5
+    assert report.json()['rows']==[]
 
 
 def test_insufficient_wallet_unapproved_or_wrong_paypal_amount_never_confirms(client, db_session, setup, monkeypatch):
@@ -182,9 +186,56 @@ def test_postgres_payment_locks_only_the_payment_table(client, db_session, setup
         assert client.post(f'/api/v1/my-payments/{payment.id}/checkout',headers=auth('patient')).status_code==200
         monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: completed(5)))
         assert client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'LOCK'}).status_code==200
-        assert client.post('/api/v1/wallet/topups',headers={**auth('patient'),'Idempotency-Key':'lock-topup-test'},json={'amount':10}).status_code==200
+        assert client.post('/api/v1/wallet/topups',headers={**auth('patient'),'Idempotency-Key':'lock-topup-test'},json={'amount':5}).status_code==200
     finally:
         event.remove(db_session,'do_orm_execute',inspect_lock)
     payment_locks=[sql for sql in statements if 'FROM payments' in sql]
     assert len(payment_locks)>=4
     assert all('FOR UPDATE OF payments' in sql for sql in payment_locks)
+
+
+def test_fixed_mobile_checkouts_are_separate_from_variable_web_pos(client, db_session, setup, monkeypatch):
+    calls=[]
+    def create(**kwargs):
+        calls.append(kwargs)
+        return {'order_id':f'ORDER-{len(calls)}','approval_url':f'https://www.sandbox.paypal.com/checkoutnow?token=ORDER-{len(calls)}'}
+    monkeypatch.setattr(PayPalService,'create_order',staticmethod(create))
+    accept(client)
+    assert client.get('/api/v1/payments',headers=auth('admin')).json()==[]
+    online=client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'ONLINE','mobile':True})
+    assert online.status_code==200,online.text
+    for amount in [10,20,50]:
+        assert client.post('/api/v1/wallet/topups',headers={**auth('patient'),'Idempotency-Key':'fixed-price-test'},json={'amount':amount}).status_code==422
+    topup=client.post('/api/v1/wallet/topups',headers={**auth('patient'),'Idempotency-Key':'fixed-price-test'},json={'amount':5})
+    assert topup.status_code==200,topup.text
+    sub=client.post('/api/v1/subscriptions/create-order',headers=auth('patient'),json={'plan_name':'CLIENTE_PREMIUM','mobile':True,'amount':1})
+    assert sub.status_code==200,sub.text
+    assert [c['amount'] for c in calls]==[5,5,5]
+    assert all(c['currency']=='USD' and c['return_url'].endswith('/payments/mobile-return') for c in calls)
+    assert client.post('/api/v1/payments/capture',headers=auth('admin'),json={'paypal_order_id':online.json()['paypal_order_id']}).status_code==403
+    assert client.get('/api/v1/payments',headers=auth('admin')).json()==[]
+    assert client.get('/api/v1/payments/stats',headers=auth('admin')).json()['total_count']==0
+    assert client.get('/api/v1/wallet',headers=auth('patient')).json()['balance']==0
+    for method in ['EFECTIVO','PAYPAL']:
+        web=client.post('/api/v1/payments/create',headers=auth('admin'),json={'tenant_id':'a','customer_name':'Cliente de caja','concept':'Servicio de caja','amount':37.5,'payment_method':method})
+        assert web.status_code==200,web.text
+        assert web.json()['amount']==37.5
+    rows=client.get('/api/v1/payments',headers=auth('admin')).json()
+    assert len(rows)==2
+    assert all(p['purpose']=='POS' and p['cashier_id']=='admin' and p['amount']==37.5 for p in rows)
+    assert {p['purpose'] for p in client.get('/api/v1/my-payments',headers=auth('patient')).json()}=={'CONSULTATION','WALLET_TOPUP'}
+    stats=client.get('/api/v1/payments/stats',headers=auth('admin')).json()
+    assert stats['total_collected']==37.5 and stats['total_count']==2
+
+
+def test_cashier_consultation_paypal_belongs_only_to_web(client, db_session, setup, monkeypatch):
+    accept(client)
+    monkeypatch.setattr(PayPalService,'create_order',staticmethod(lambda **kw: {'order_id':'CASHIER','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=CASHIER'}))
+    assert client.post('/api/v1/appointments/appointment/pay',headers=auth('admin'),json={'method':'PAYPAL'}).status_code==200
+    rows=client.get('/api/v1/payments',headers=auth('admin')).json()
+    assert len(rows)==1 and rows[0]['cashier_id']=='admin'
+    assert client.get('/api/v1/my-payments',headers=auth('patient')).json()==[]
+    assert client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'CASHIER'}).status_code==403
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: completed(5)))
+    assert client.post('/api/v1/payments/capture',headers=auth('admin'),json={'paypal_order_id':'CASHIER'}).status_code==200
+    assert client.get('/api/v1/appointments',headers=auth('patient')).json()[0]['payment_status']=='PAID'

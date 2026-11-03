@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user, get_current_user_optional
 from app.models.user import User
-from app.models.payment import Payment
+from app.models.payment import Payment, cash_register_filter
 from app.core.authorization import require_role, require_tenant, STAFF_ROLES
 from app.config import settings
 from app.schemas.payment import (
@@ -155,9 +155,11 @@ def _authorize_payment(db, actor, payment_id=None, order_id=None):
     if payment is None:
         raise HTTPException(status_code=404, detail="Cobro no encontrado.")
     if actor.role_id == 'CLIENTE':
-        if payment.patient_id != actor.id:
+        if payment.patient_id != actor.id or payment.cashier_id is not None:
             raise HTTPException(403, detail='Solo puedes consultar tus pagos.')
     else:
         require_role(actor, STAFF_ROLES)
         require_tenant(actor, payment.tenant_id)
+        if not db.query(Payment.id).filter(Payment.id == payment.id, cash_register_filter()).first():
+            raise HTTPException(403, detail='Este pago pertenece al cliente mobile, no a caja web.')
     return payment

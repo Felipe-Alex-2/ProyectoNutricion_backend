@@ -17,7 +17,7 @@ def my_payments(db: Session = Depends(get_db), user=Depends(get_current_user)):
     from app.models.payment import Payment
     from app.services.payment_service import PaymentService
     require_role(user, {'CLIENTE'})
-    rows = db.query(Payment).filter_by(patient_id=user.id).order_by(Payment.created_at.desc()).all()
+    rows = db.query(Payment).filter_by(patient_id=user.id, cashier_id=None).order_by(Payment.created_at.desc()).all()
     return [PaymentService._map_to_out(p) for p in rows]
 
 
@@ -25,7 +25,7 @@ def my_payments(db: Session = Depends(get_db), user=Depends(get_current_user)):
 def resume_checkout(payment_id: str, request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     from app.models.payment import Payment
     require_role(user, {'CLIENTE'})
-    payment = db.query(Payment).filter_by(id=payment_id, patient_id=user.id).with_for_update(of=Payment).first()
+    payment = db.query(Payment).filter_by(id=payment_id, patient_id=user.id, cashier_id=None).with_for_update(of=Payment).first()
     if not payment:
         raise HTTPException(404, detail='Pago no encontrado.')
     if payment.status != 'PENDING' or payment.purpose not in {'CONSULTATION', 'WALLET_TOPUP'}:
@@ -34,7 +34,7 @@ def resume_checkout(payment_id: str, request: Request, db: Session = Depends(get
 
 
 class Topup(BaseModel):
-    amount: Literal[5, 10, 20, 50]
+    amount: Literal[5]
 
 
 class Pay(BaseModel):

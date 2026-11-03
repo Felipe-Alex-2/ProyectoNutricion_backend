@@ -43,3 +43,10 @@ class Payment(WorkspaceOwned, Base):
     # Relationships
     tenant = relationship("Tenant", foreign_keys=[tenant_id], lazy="joined")
     cashier = relationship("User", foreign_keys=[cashier_id], lazy="joined")
+
+
+def cash_register_filter():
+    """POS charges and consultations explicitly collected by a web cashier."""
+    return (Payment.purpose == 'POS') | (
+        (Payment.purpose == 'CONSULTATION') & Payment.cashier_id.is_not(None)
+    )

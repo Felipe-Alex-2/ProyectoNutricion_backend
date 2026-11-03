@@ -11,7 +11,7 @@ active subscription queries, cancellation, and payment history.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -72,6 +72,7 @@ def get_current_subscription(
 @router.post("/create-order", response_model=CreateOrderResponse)
 def create_order(
     body: CreateOrderRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -95,12 +96,14 @@ def create_order(
                 detail="Solo los administradores pueden gestionar suscripciones corporativas.",
             )
 
+    from app.api.v1.consultation_payments import mobile_return_url
     try:
         result = SubscriptionService.create_order(
             db,
             tenant_id=tenant_id,
             plan_name=body.plan_name,
             user_id=user_id,
+            checkout_return_url=mobile_return_url(request) if body.mobile else None,
         )
         return CreateOrderResponse(
             order_id=result["order_id"],

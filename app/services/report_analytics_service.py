@@ -6,7 +6,7 @@ from sqlalchemy.orm import aliased
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.company import Branch
-from app.models.payment import Payment
+from app.models.payment import Payment, cash_register_filter
 from app.models.appointment import Appointment
 from app.models.recipe import Recipe
 from app.models.clinical import ClinicalRecord
@@ -54,7 +54,7 @@ class ReportAnalyticsService:
         if model is None:raise BadRequestException('Entidad de reporte no disponible.')
         q=db.query(model).filter(model.tenant_id.in_([c.id for c in companies]))
         if model is Payment:
-            q=q.filter(Payment.purpose != 'WALLET_TOPUP')
+            q=q.filter(cash_register_filter())
         if model is User:
             q=q.filter(User.role_id=='CLIENTE');branch_col=User.branch_id
         else:branch_col=model.branch_id

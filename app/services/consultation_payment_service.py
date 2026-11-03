@@ -63,8 +63,8 @@ class ConsultationPaymentService:
     @staticmethod
     def topup(db, user, amount, return_url, key):
         from uuid import uuid5, NAMESPACE_URL
-        if amount not in {5, 10, 20, 50}:
-            raise HTTPException(422, detail='Selecciona USD 5, 10, 20 o 50.')
+        if amount != 5:
+            raise HTTPException(422, detail='La recarga de wallet es de USD 5.')
         if not user.tenant_id or not user.branch_id:
             raise HTTPException(400, detail='Tu cuenta necesita una empresa y sucursal asignadas.')
         db.query(User).filter_by(id=user.id).with_for_update(of=User).one()
@@ -106,6 +106,8 @@ class ConsultationPaymentService:
         payment = db.query(Payment).filter_by(appointment_id=appointment.id).with_for_update(of=Payment).first()
         if payment and payment.status == 'COMPLETED':
             return {'payment_id': payment.id, 'status': 'COMPLETED'}
+        if user.role_id == 'CLIENTE' and payment and payment.cashier_id:
+            raise HTTPException(409, detail='Este cobro está siendo gestionado desde caja web.')
         if appointment.status != 'ACCEPTED':
             raise HTTPException(409, detail='La cita debe ser aceptada antes de pagar.')
         payment = payment or ConsultationPaymentService.ensure_charge(db, appointment)
@@ -127,6 +129,10 @@ class ConsultationPaymentService:
             payment.payment_method = method
             db.commit()
             return {'payment_id': payment.id, 'status': 'PENDING', 'payment_preference': method}
+        if user.role_id != 'CLIENTE':
+            if payment.paypal_order_id and not payment.cashier_id:
+                raise HTTPException(409, detail='El cliente ya inició su pago online. Debe verificarlo desde mobile.')
+            payment.cashier_id = user.id
         if method == 'PAYPAL':
             return ConsultationPaymentService.checkout(db, payment, return_url)
         if method == 'WALLET':

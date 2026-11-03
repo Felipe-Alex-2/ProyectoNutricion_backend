@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, case
 from fastapi import HTTPException, status
 
-from app.models.payment import Payment
+from app.models.payment import Payment, cash_register_filter
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.schemas.payment import (
@@ -217,7 +217,7 @@ class PaymentService:
         status_filter: Optional[str] = None,
     ) -> List[PaymentOut]:
         """List payments filtered by tenant branch and optional status or payment method."""
-        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier))
+        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier)).filter(cash_register_filter())
         if tenant_id:
             query = query.filter(Payment.tenant_id == tenant_id)
         if status_filter:
@@ -235,11 +235,10 @@ class PaymentService:
     @staticmethod
     def get_payment_stats(db: Session, tenant_id: Optional[str] = None) -> PaymentStatsOut:
         """Calculate summary statistics for a given branch or all branches."""
-        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier))
+        query = db.query(Payment).options(joinedload(Payment.tenant), joinedload(Payment.cashier)).filter(cash_register_filter())
         if tenant_id:
             query = query.filter(Payment.tenant_id == tenant_id)
 
-        query = query.filter(Payment.purpose != "WALLET_TOPUP")
         totals = query.with_entities(
             func.coalesce(func.sum(case((Payment.status == "COMPLETED", Payment.amount), else_=0)), 0),
             func.count(Payment.id),

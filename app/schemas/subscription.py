@@ -20,6 +20,7 @@ class SubscriptionPlanOut(BaseModel):
 
 
 class CreateOrderRequest(BaseModel):
+    mobile: bool = False
     plan_name: str  # BASICO, PROFESIONAL, PREMIUM
 
 

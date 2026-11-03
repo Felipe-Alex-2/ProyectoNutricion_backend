@@ -11,13 +11,13 @@ Las citas confirmadas de versiones anteriores conservan su estado y no reciben c
 
 ## Wallet en Perfil
 
-- Recargas fijas: USD 5, 10, 20 o 50, exclusivamente por PayPal Sandbox.
+- Recarga fija: USD 5 por operación, exclusivamente por PayPal Sandbox. Otros importes se rechazan en backend.
 - La solicitud incluye `Idempotency-Key`. La misma clave reanuda la operación original y rechaza un importe distinto.
 - El saldo se obtiene del libro de movimientos decimales del paciente; no se modifica en el teléfono.
 - Una recarga solo se acredita cuando PayPal devuelve captura `COMPLETED`, con importe y moneda coincidentes. Las verificaciones repetidas no vuelven a acreditar.
 - Pagar una consulta debita USD 5 y confirma la cita en la misma transacción. Se bloquean saldo insuficiente, pacientes ajenos y cobros antes de aceptar.
 - Al volver de PayPal, la app verifica automáticamente la orden activa (o la más reciente pendiente al abrir la pantalla). «Verificar pago» permite reintentar manualmente. Las órdenes pendientes y «Volver a abrir PayPal» permanecen disponibles desde Perfil aunque se cierre la pantalla.
-- Las recargas son saldo anticipado: no se suman como ingresos por servicios en estadísticas ni reportes, para evitar contarlas otra vez cuando se paga la consulta.
+- Los pagos mobile (recargas y consultas online/wallet) no aparecen en historial, estadísticas ni reportes de caja web. Caja muestra cobros POS con importe elegido por el cajero y consultas cobradas explícitamente por ese cajero. La cita conserva su estado pagado visible para el equipo, aunque el pago venga de mobile.
 
 No se cambia a efectivo/wallet mientras exista una orden PayPal iniciada, para evitar dos cobros por la misma consulta. La devolución de una cita ya pagada requiere un proceso administrativo; este cambio no implementa reembolsos ni cancelaciones de pagos capturados.
 
@@ -36,7 +36,7 @@ Referencia del proveedor: https://developer.paypal.com/api/make-api-requests (id
 
 Después de aceptar una cita, el cliente elige Wallet, Online o Presencial. La misma ruta de pago recibe method=WALLET/ONLINE/PRESENCIAL. Online crea o reanuda la orden PayPal y devuelve approval_url; solo la captura verificada marca el pago como completado. Wallet descuenta USD 5 y completa el cobro en una transacción. Presencial queda pendiente hasta el cobro en caja. Una orden PayPal iniciada debe verificarse antes de cambiar de modalidad.
 
-La API de citas devuelve payment_status (PAID, UNPAID o UNRECORDED), payment_preference (ONLINE o PRESENCIAL), payment_method y payment_id. Estos datos se obtienen del cobro vinculado, no del estado de la cita. Una cita antigua confirmada sin cobro vinculado se muestra como «Sin pago registrado»; no se presume que esté pagada. Gestión de citas muestra la columna Pago y un botón de cobro para consultas aceptadas con pago presencial pendiente; caja conserva el registro del cobro. El historial y las estadísticas de caja se actualizan mediante la consulta periódica mientras está abierto ese apartado.
+La API de citas devuelve payment_status (PAID, UNPAID o UNRECORDED), payment_preference (ONLINE o PRESENCIAL), payment_method y payment_id. Estos datos se obtienen del cobro vinculado, no del estado de la cita. Una cita antigua confirmada sin cobro vinculado se muestra como «Sin pago registrado»; no se presume que esté pagada. Gestión de citas muestra la columna Pago y un botón de cobro para consultas aceptadas con pago presencial pendiente; caja conserva el registro del cobro. El historial y las estadísticas de caja se actualizan mediante la consulta periódica mientras está abierto ese apartado; solo incluyen cobros de caja web.
 
 Si /openapi.json no incluye /api/v1/wallet y /api/v1/wallet/topups, la versión publicada aún no contiene este módulo. En Railway, Redeploy repite el código de un despliegue anterior. Usar la paleta de comandos, Deploy Latest Commit, para desplegar main desde el repositorio backend correcto. Luego comprobar los Deploy Logs, el paso python prepare_db.py y las rutas publicadas. Referencia: https://docs.railway.com/deployments/deployment-actions.
 
@@ -45,3 +45,11 @@ Si /openapi.json no incluye /api/v1/wallet y /api/v1/wallet/topups, la versión 
 `run_local.py` carga `.env.local`; añadir allí `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET` de la misma app Sandbox, junto con `PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com`. Para iniciar con `run.py`, se carga `.env`. Los valores `your-paypal-sandbox-client-id` y `your-paypal-sandbox-secret-key` son ejemplos y producen `401 invalid_client`. En Railway configurar esas variables del servicio backend. Nunca incluir secretos en Git ni en el cliente móvil/web.
 
 Los bloqueos de consulta, pago y saldo indican explícitamente la tabla (`FOR UPDATE OF payments`, etc.). Esto evita bloquear el lado nullable de los LEFT JOIN de cashier/tenant en PostgreSQL. Las pruebas SQLite no reproducen ese error; la prueba de regresión compila las consultas reales de los endpoints con el dialecto PostgreSQL y verifica la tabla bloqueada. El manejador de errores conserva los detalles SQL en los logs y devuelve un mensaje comprensible a la app.
+
+## Separación de caja y mobile
+
+- Caja web: `purpose=POS` o consulta con `cashier_id` asignado. El cajero define los importes de sus cobros POS y elige efectivo o PayPal.
+- Mobile: consulta online/wallet sin cajero y `WALLET_TOPUP`. Suscripciones Premium personales se guardan en `subscriptions` y sus recibos personales. Cada checkout mobile es USD 5, calculado/validado por backend.
+- Elegir presencial solo notifica y conserva pendiente la cita; la consulta entra en caja cuando el cajero inicia su cobro. El historial mobile excluye registros de caja. La API de captura y comprobantes aplica el mismo alcance.
+- Mobile abre la URL de aprobación de PayPal en una aplicación externa (navegador). El comprador inicia sesión con su cuenta **Personal Sandbox**, revisa USD 5 y decide aprobar. La cuenta Business recibe los fondos; no se usa como comprador. Abrir el enlace o volver desde PayPal no acredita saldo ni activa Premium: hace falta verificar/capturar el pago.
+- Las credenciales se configuran exclusivamente en variables del backend. Los archivos locales de entorno están ignorados por Git; Railway necesita sus propias variables actualizadas y el backend redesplegado.
