@@ -4,7 +4,7 @@
 
 1. El cliente solicita la consulta general desde móvil. Queda `PENDING`.
 2. El equipo acepta desde Gestión de citas (`POST /appointments/{id}/confirm`, ruta conservada por compatibilidad). Pasa a `ACCEPTED`, crea un único cobro pendiente de USD 5 con paciente, empresa y sucursal de la cita.
-3. El botón «Cobrar USD 5» abre la caja web con los datos del paciente. Se registra efectivo o se inicia PayPal. En móvil, el cliente elige wallet o PayPal después de la aceptación.
+3. El botón «Cobrar USD 5» abre la caja web con los datos del paciente. Se registra efectivo o se inicia PayPal. En móvil, el cliente tiene tres opciones directas después de la aceptación: Wallet, Online (PayPal Sandbox) y Presencial. Presencial notifica al equipo, conserva el cobro pendiente y muestra «Cobrar USD 5 en caja» en la cita; ese botón abre la caja con cliente, correo e importe precargados.
 4. El cobro completado y el cambio a `CONFIRMED` se guardan en una transacción. Se notifica al paciente y se conserva el comprobante. La web consulta cambios cada 12 segundos y el móvil cada 15 segundos mientras está en primer plano.
 
 Las citas confirmadas de versiones anteriores conservan su estado y no reciben cobros retroactivos.
@@ -34,8 +34,14 @@ Referencia del proveedor: https://developer.paypal.com/api/make-api-requests (id
 
 ## Modalidad y columna de pago en citas
 
-Después de aceptar una cita, el cliente elige Online o Presencial. Elegir modalidad usa la misma ruta de pago con method=ONLINE/PRESENCIAL y solo actualiza el cobro pendiente; nunca marca el pago como completado. Online habilita wallet y PayPal. Presencial queda pendiente hasta el cobro en caja. Una orden PayPal iniciada debe verificarse antes de cambiar de modalidad.
+Después de aceptar una cita, el cliente elige Wallet, Online o Presencial. La misma ruta de pago recibe method=WALLET/ONLINE/PRESENCIAL. Online crea o reanuda la orden PayPal y devuelve approval_url; solo la captura verificada marca el pago como completado. Wallet descuenta USD 5 y completa el cobro en una transacción. Presencial queda pendiente hasta el cobro en caja. Una orden PayPal iniciada debe verificarse antes de cambiar de modalidad.
 
-La API de citas devuelve payment_status (PAID, UNPAID o UNRECORDED), payment_preference (ONLINE o PRESENCIAL), payment_method y payment_id. Estos datos se obtienen del cobro vinculado, no del estado de la cita. Una cita antigua confirmada sin cobro vinculado se muestra como «Sin pago registrado»; no se presume que esté pagada. Gestión de citas muestra la columna Pago de solo lectura y las acciones de aceptación/cancelación; caja conserva el registro del cobro.
+La API de citas devuelve payment_status (PAID, UNPAID o UNRECORDED), payment_preference (ONLINE o PRESENCIAL), payment_method y payment_id. Estos datos se obtienen del cobro vinculado, no del estado de la cita. Una cita antigua confirmada sin cobro vinculado se muestra como «Sin pago registrado»; no se presume que esté pagada. Gestión de citas muestra la columna Pago y un botón de cobro para consultas aceptadas con pago presencial pendiente; caja conserva el registro del cobro. El historial y las estadísticas de caja se actualizan mediante la consulta periódica mientras está abierto ese apartado.
 
 Si /openapi.json no incluye /api/v1/wallet y /api/v1/wallet/topups, la versión publicada aún no contiene este módulo. En Railway, Redeploy repite el código de un despliegue anterior. Usar la paleta de comandos, Deploy Latest Commit, para desplegar main desde el repositorio backend correcto. Luego comprobar los Deploy Logs, el paso python prepare_db.py y las rutas publicadas. Referencia: https://docs.railway.com/deployments/deployment-actions.
+
+## Configuración local y comprobación de PostgreSQL
+
+`run_local.py` carga `.env.local`; añadir allí `PAYPAL_CLIENT_ID` y `PAYPAL_CLIENT_SECRET` de la misma app Sandbox, junto con `PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com`. Para iniciar con `run.py`, se carga `.env`. Los valores `your-paypal-sandbox-client-id` y `your-paypal-sandbox-secret-key` son ejemplos y producen `401 invalid_client`. En Railway configurar esas variables del servicio backend. Nunca incluir secretos en Git ni en el cliente móvil/web.
+
+Los bloqueos de consulta, pago y saldo indican explícitamente la tabla (`FOR UPDATE OF payments`, etc.). Esto evita bloquear el lado nullable de los LEFT JOIN de cashier/tenant en PostgreSQL. Las pruebas SQLite no reproducen ese error; la prueba de regresión compila las consultas reales de los endpoints con el dialecto PostgreSQL y verifica la tabla bloqueada. El manejador de errores conserva los detalles SQL en los logs y devuelve un mensaje comprensible a la app.

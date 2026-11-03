@@ -67,7 +67,7 @@ class ConsultationPaymentService:
             raise HTTPException(422, detail='Selecciona USD 5, 10, 20 o 50.')
         if not user.tenant_id or not user.branch_id:
             raise HTTPException(400, detail='Tu cuenta necesita una empresa y sucursal asignadas.')
-        db.query(User).filter_by(id=user.id).with_for_update().one()
+        db.query(User).filter_by(id=user.id).with_for_update(of=User).one()
         payment_id = str(uuid5(NAMESPACE_URL, f'wallet-topup:{user.id}:{key}'))
         payment = db.get(Payment, payment_id)
         if payment and payment.amount != amount:
@@ -82,13 +82,13 @@ class ConsultationPaymentService:
             db.add(payment)
             # Persist the idempotency key before contacting the external provider.
             db.commit()
-        payment = db.query(Payment).filter_by(id=payment_id).with_for_update().one()
+        payment = db.query(Payment).filter_by(id=payment_id).with_for_update(of=Payment).one()
         return ConsultationPaymentService.checkout(db, payment, return_url)
 
     @staticmethod
     def pay(db, user, appointment_id, method, return_url):
         from app.core.authorization import require_role, require_tenant, STAFF_ROLES
-        appointment = db.query(Appointment).filter_by(id=appointment_id).with_for_update().first()
+        appointment = db.query(Appointment).filter_by(id=appointment_id).with_for_update(of=Appointment).first()
         if not appointment:
             raise HTTPException(404, detail='Cita no encontrada.')
         if user.role_id == 'CLIENTE':
@@ -101,7 +101,9 @@ class ConsultationPaymentService:
             require_tenant(user, appointment.tenant_id)
             if method not in {'EFECTIVO', 'PAYPAL'}:
                 raise HTTPException(422, detail='Selecciona efectivo o PayPal.')
-        payment = db.query(Payment).filter_by(appointment_id=appointment.id).with_for_update().first()
+        if method == 'ONLINE':
+            method = 'PAYPAL'
+        payment = db.query(Payment).filter_by(appointment_id=appointment.id).with_for_update(of=Payment).first()
         if payment and payment.status == 'COMPLETED':
             return {'payment_id': payment.id, 'status': 'COMPLETED'}
         if appointment.status != 'ACCEPTED':
@@ -109,14 +111,26 @@ class ConsultationPaymentService:
         payment = payment or ConsultationPaymentService.ensure_charge(db, appointment)
         if method != 'PAYPAL' and payment.paypal_order_id:
             raise HTTPException(409, detail='Ya hay una orden PayPal. Verifica ese pago para evitar un cobro doble.')
-        if method in {'ONLINE', 'PRESENCIAL'}:
+        if method == 'PRESENCIAL':
+            if payment.payment_method != method:
+                from app.models.notification import Notification
+                recipients = db.query(User).filter(
+                    User.tenant_id == appointment.tenant_id,
+                    User.role_id.in_(['ADMIN_ORGANIZATION', 'NUTRICIONISTA']),
+                    User.is_active.is_(True),
+                ).all()
+                for recipient in recipients:
+                    db.add(Notification(user_id=recipient.id, tenant_id=appointment.tenant_id,
+                        branch_id=appointment.branch_id, title='Pago presencial pendiente',
+                        type='SISTEMA', reference_id=appointment.id,
+                        message=f'{payment.customer_name} pagará USD 5 de su consulta general en caja.'))
             payment.payment_method = method
             db.commit()
             return {'payment_id': payment.id, 'status': 'PENDING', 'payment_preference': method}
         if method == 'PAYPAL':
             return ConsultationPaymentService.checkout(db, payment, return_url)
         if method == 'WALLET':
-            db.query(User).filter_by(id=user.id).with_for_update().one()
+            db.query(User).filter_by(id=user.id).with_for_update(of=User).one()
             if ConsultationPaymentService.balance(db, user.id) < Decimal('5'):
                 raise HTTPException(400, detail='Saldo insuficiente. Recarga tu wallet desde Perfil.')
             db.add(WalletMovement(user_id=user.id, tenant_id=payment.tenant_id, branch_id=payment.branch_id,
@@ -147,13 +161,13 @@ class ConsultationPaymentService:
         from app.services.payment_service import PaymentService
         appointment = None
         if payment.appointment_id:
-            appointment = db.query(Appointment).filter_by(id=payment.appointment_id).with_for_update().first()
-        payment = db.query(Payment).filter_by(id=payment.id).populate_existing().with_for_update().one()
+            appointment = db.query(Appointment).filter_by(id=payment.appointment_id).with_for_update(of=Appointment).first()
+        payment = db.query(Payment).filter_by(id=payment.id).populate_existing().with_for_update(of=Payment).one()
         if payment.status == 'COMPLETED':
             return PaymentService._map_to_out(payment)
         if payment.status == 'CANCELLED' or (appointment and appointment.status != 'ACCEPTED'):
             raise HTTPException(409, detail='El cobro o la cita ya no está disponible.')
-        db.query(User).filter_by(id=payment.patient_id).with_for_update().one()
+        db.query(User).filter_by(id=payment.patient_id).with_for_update(of=User).one()
         try:
             order = PayPalService.get_order(payment.paypal_order_id)
             if order.get('status') != 'COMPLETED':

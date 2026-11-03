@@ -34,10 +34,10 @@ async def general_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, SQLAlchemyError):
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": f"Database error: {str(exc)}"},
+            content={"detail": "No se pudo procesar la operación. Intenta nuevamente o contacta a la clínica."},
         )
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": f"Internal server error: {str(exc)}"},
+        content={"detail": "No se pudo completar la operación. Intenta nuevamente."},
     )

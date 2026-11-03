@@ -113,6 +113,10 @@ def test_patient_selects_in_person_without_marking_paid_and_staff_sees_choice(cl
     selected=client.post(path,headers=auth('patient'),json={'method':'PRESENCIAL'})
     assert selected.status_code==200,selected.text
     assert selected.json()['status']=='PENDING'
+    from app.models.notification import Notification
+    assert db_session.query(Notification).filter_by(title='Pago presencial pendiente').count()==2
+    assert client.post(path,headers=auth('patient'),json={'method':'PRESENCIAL'}).status_code==200
+    assert db_session.query(Notification).filter_by(title='Pago presencial pendiente').count()==2
     row=client.get('/api/v1/appointments',headers=auth('admin')).json()[0]
     assert row['payment_preference']=='PRESENCIAL'
     assert row['payment_status']=='UNPAID'
@@ -129,13 +133,58 @@ def test_patient_selects_in_person_without_marking_paid_and_staff_sees_choice(cl
     assert db_session.query(Payment).one().payment_method=='EFECTIVO'
 
 
-def test_online_preference_is_visible_without_charging_and_legacy_is_unrecorded(client, db_session, setup):
+def test_online_opens_paypal_and_only_verified_capture_marks_paid(client, db_session, setup, monkeypatch):
     row=client.get('/api/v1/appointments',headers=auth('admin')).json()[0]
     assert row['payment_status']=='UNRECORDED'
     accept(client)
-    response=client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'ONLINE'})
-    assert response.status_code==200,response.text
+    orders=[]
+    def create(**kwargs):
+        orders.append(kwargs)
+        return {'order_id':'ONLINE','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=ONLINE'}
+    monkeypatch.setattr(PayPalService,'create_order',staticmethod(create))
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: {'status':'CREATED','links':[{'rel':'payer-action','href':'https://www.sandbox.paypal.com/checkoutnow?token=ONLINE'}]}))
+    for _ in range(2):
+        response=client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'ONLINE','mobile':True})
+        assert response.status_code==200,response.text
+        assert response.json()['paypal_order_id']=='ONLINE'
+        assert 'sandbox.paypal.com' in response.json()['approval_url']
+    assert len(orders)==1
+    assert orders[0]['amount']==5
     row=client.get('/api/v1/appointments',headers=auth('admin')).json()[0]
     assert row['payment_preference']=='ONLINE'
     assert row['payment_status']=='UNPAID'
-    assert db_session.query(Payment).one().paypal_order_id is None
+    # A live order cannot also be charged in cash or from the wallet.
+    assert client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'WALLET'}).status_code==409
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: completed(5)))
+    assert client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'ONLINE'}).status_code==200
+    row=client.get('/api/v1/appointments',headers=auth('admin')).json()[0]
+    assert row['payment_status']=='PAID'
+    assert row['payment_method']=='PAYPAL'
+
+
+def test_postgres_payment_locks_only_the_payment_table(client, db_session, setup, monkeypatch):
+    # SQLite ignores FOR UPDATE; compile the actual endpoint queries for Postgres
+    # to catch the nullable eager-join failure that SQLite endpoint tests miss.
+    from sqlalchemy import event
+    from sqlalchemy.dialects import postgresql
+    statements=[]
+    def inspect_lock(state):
+        statement=state.statement
+        if getattr(statement, '_for_update_arg', None) is not None:
+            statements.append(str(statement.compile(dialect=postgresql.dialect())))
+    event.listen(db_session, 'do_orm_execute', inspect_lock)
+    try:
+        accept(client)
+        monkeypatch.setattr(PayPalService,'create_order',staticmethod(lambda **kw: {'order_id':'LOCK','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=LOCK'}))
+        monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: {'status':'CREATED','links':[]}))
+        assert client.post('/api/v1/appointments/appointment/pay',headers=auth('patient'),json={'method':'ONLINE'}).status_code==200
+        payment=db_session.query(Payment).one()
+        assert client.post(f'/api/v1/my-payments/{payment.id}/checkout',headers=auth('patient')).status_code==200
+        monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: completed(5)))
+        assert client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'LOCK'}).status_code==200
+        assert client.post('/api/v1/wallet/topups',headers={**auth('patient'),'Idempotency-Key':'lock-topup-test'},json={'amount':10}).status_code==200
+    finally:
+        event.remove(db_session,'do_orm_execute',inspect_lock)
+    payment_locks=[sql for sql in statements if 'FROM payments' in sql]
+    assert len(payment_locks)>=4
+    assert all('FOR UPDATE OF payments' in sql for sql in payment_locks)

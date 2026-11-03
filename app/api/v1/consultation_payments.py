@@ -25,7 +25,7 @@ def my_payments(db: Session = Depends(get_db), user=Depends(get_current_user)):
 def resume_checkout(payment_id: str, request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     from app.models.payment import Payment
     require_role(user, {'CLIENTE'})
-    payment = db.query(Payment).filter_by(id=payment_id, patient_id=user.id).with_for_update().first()
+    payment = db.query(Payment).filter_by(id=payment_id, patient_id=user.id).with_for_update(of=Payment).first()
     if not payment:
         raise HTTPException(404, detail='Pago no encontrado.')
     if payment.status != 'PENDING' or payment.purpose not in {'CONSULTATION', 'WALLET_TOPUP'}:
