@@ -17,3 +17,5 @@ openpyxl==3.1.5
 reportlab==5.0.1
 types-python-jose==3.5.0.20260408
 cryptography==50.0.2
+
+firebase-admin==7.7.0

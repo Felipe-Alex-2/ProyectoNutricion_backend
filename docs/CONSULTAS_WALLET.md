@@ -53,3 +53,13 @@ Los bloqueos de consulta, pago y saldo indican explícitamente la tabla (`FOR UP
 - Elegir presencial solo notifica y conserva pendiente la cita; la consulta entra en caja cuando el cajero inicia su cobro. El historial mobile excluye registros de caja. La API de captura y comprobantes aplica el mismo alcance.
 - Mobile abre la URL de aprobación de PayPal en una aplicación externa (navegador). El comprador inicia sesión con su cuenta **Personal Sandbox**, revisa USD 5 y decide aprobar. La cuenta Business recibe los fondos; no se usa como comprador. Abrir el enlace o volver desde PayPal no acredita saldo ni activa Premium: hace falta verificar/capturar el pago.
 - Las credenciales se configuran exclusivamente en variables del backend. Los archivos locales de entorno están ignorados por Git; Railway necesita sus propias variables actualizadas y el backend redesplegado.
+
+## Separación de pantallas y cancelación de selección
+
+- Perfil > Wallet permite recargar USD 5, consultar movimientos y recibos de recargas y pagos realizados con wallet. El botón se llama «Recargar wallet USD 5 con PayPal».
+- El pago de una cita muestra solo el saldo de wallet y los pagos/comprobantes de esa cita; no muestra controles de recarga, movimientos generales ni recargas pendientes de Perfil.
+- Antes de descontar wallet, un diálogo permite confirmar o cancelar. El pago completado muestra un recibo breve con concepto, importe, método, fecha y referencia; el PDF sigue disponible.
+- «Cancelar selección y volver a elegir» restablece un pago pendiente a PENDING. Solo el dueño de la cita puede hacerlo; un pago completado o en caja no se cambia. Para una orden PayPal primero se consulta al proveedor: si está aprobada/completada se verifica y completa la operación original; si aún no fue aprobada, se retira la referencia local y se permite otro método. La orden vieja no puede capturarse por las rutas de la app y el siguiente checkout usa otra clave de idempotencia. No es un reembolso ni una cancelación de la cita.
+- Las notificaciones de recarga, pago de cita y suscripción Premium se guardan junto a la operación. El envío FCM se encola después del commit; los fallos de push no revierten pagos.
+
+Para activar Firebase y probar avisos con Android cerrado sigue **mobile/docs/NOTIFICACIONES_PUSH.md** en el repositorio raíz del proyecto.

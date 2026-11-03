@@ -44,6 +44,8 @@ def test_confirmed_checkout_issues_one_durable_receipt(client, db_session, pendi
         assert response.json()['paid']
     assert queries == ['ORDER-123']
     assert db_session.query(SubscriptionReceipt).count() == 1
+    from app.models.notification import Notification
+    assert db_session.query(Notification).filter_by(user_id='buyer', title='Suscripción Premium activada').count() == 1
     receipt = db_session.get(SubscriptionReceipt, pending.id)
     assert receipt.amount == Decimal('5.00')
     assert receipt.paypal_capture_id == 'CAPTURE-123'

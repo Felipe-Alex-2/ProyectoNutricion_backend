@@ -28,6 +28,11 @@ class SubscriptionReceiptService:
             paid_at=subscription.started_at, expires_at=subscription.expires_at,
         )
         db.add(receipt)
+        if subscription.plan_name == 'CLIENTE_PREMIUM':
+            from app.models.notification import Notification
+            db.add(Notification(user_id=buyer.id, tenant_id=buyer.tenant_id, branch_id=buyer.branch_id,
+                title='Suscripción Premium activada', type='PAGO', reference_id=subscription.id,
+                message=f'Pago de USD {subscription.amount:.2f} confirmado con PayPal. Tu acceso Premium está activo por 30 días y tu recibo está disponible en Suscripciones.'))
         return receipt
 
     @staticmethod

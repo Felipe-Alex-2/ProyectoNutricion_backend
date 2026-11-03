@@ -96,3 +96,11 @@ def get_conditions_catalog(
     ExpertSystemService.seed_default_expert_data(db)
     items = db.query(ConditionCatalog).all()
     return items
+
+
+@router.post('/device-tokens/unregister')
+def unregister_device_token(data: DeviceTokenCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.models.ai_nutrition import DeviceToken
+    db.query(DeviceToken).filter_by(token=data.token, user_id=current_user.id).delete()
+    db.commit()
+    return {'status': 'unregistered'}

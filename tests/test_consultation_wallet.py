@@ -239,3 +239,108 @@ def test_cashier_consultation_paypal_belongs_only_to_web(client, db_session, set
     monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda order: completed(5)))
     assert client.post('/api/v1/payments/capture',headers=auth('admin'),json={'paypal_order_id':'CASHIER'}).status_code==200
     assert client.get('/api/v1/appointments',headers=auth('patient')).json()[0]['payment_status']=='PAID'
+
+
+def test_cancel_payment_choice_allows_reselection_and_retires_old_order(client, db_session, setup, monkeypatch):
+    accept(client)
+    requests=[]
+    def create(**kw):
+        requests.append(kw['request_id'])
+        return {'order_id':f'ORDER-{len(requests)}','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=NEW'}
+    monkeypatch.setattr(PayPalService,'create_order',staticmethod(create))
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda _: {'status':'PAYER_ACTION_REQUIRED'}))
+    path='/api/v1/appointments/appointment'
+    assert client.post(path+'/pay',headers=auth('patient'),json={'method':'ONLINE'}).status_code==200
+    assert client.post(path+'/cancel-payment-choice',headers=auth('other')).status_code==404
+    assert client.post(path+'/cancel-payment-choice',headers=auth('patient')).status_code==200
+    payment=db_session.query(Payment).one()
+    assert payment.payment_method=='PENDING' and payment.paypal_order_id is None
+    assert 'ORDER-1' in payment.notes
+    assert client.post('/api/v1/payments/capture',headers=auth('patient'),json={'paypal_order_id':'ORDER-1'}).status_code==404
+    assert client.post(path+'/pay',headers=auth('patient'),json={'method':'PRESENCIAL'}).status_code==200
+    assert client.post(path+'/cancel-payment-choice',headers=auth('patient')).status_code==200
+    assert client.post(path+'/pay',headers=auth('patient'),json={'method':'ONLINE'}).status_code==200
+    assert len(set(requests))==2
+    assert payment.paypal_order_id=='ORDER-2'
+
+
+def test_cancel_after_paypal_approval_settles_original_without_second_charge(client, db_session, setup, monkeypatch):
+    accept(client)
+    monkeypatch.setattr(PayPalService,'create_order',staticmethod(lambda **kw: {'order_id':'APPROVED','approval_url':'https://www.sandbox.paypal.com/checkoutnow?token=APPROVED'}))
+    path='/api/v1/appointments/appointment'
+    assert client.post(path+'/pay',headers=auth('patient'),json={'method':'ONLINE'}).status_code==200
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(lambda _: completed(5)))
+    response=client.post(path+'/cancel-payment-choice',headers=auth('patient'))
+    assert response.status_code==200 and response.json()['status']=='COMPLETED'
+    assert db_session.query(Payment).one().paypal_order_id=='APPROVED'
+    assert db_session.query(WalletMovement).count()==0
+    assert client.post(path+'/cancel-payment-choice',headers=auth('patient')).status_code==409
+
+
+def test_cancel_choice_on_provider_failure_keeps_order(client, db_session, setup, monkeypatch):
+    accept(client)
+    payment=db_session.query(Payment).one()
+    payment.paypal_order_id='KEEP'
+    payment.payment_method='PAYPAL'
+    db_session.commit()
+    def unavailable(_): raise RuntimeError('offline')
+    monkeypatch.setattr(PayPalService,'get_order',staticmethod(unavailable))
+    response=client.post('/api/v1/appointments/appointment/cancel-payment-choice',headers=auth('patient'))
+    assert response.status_code==502
+    assert payment.paypal_order_id=='KEEP'
+
+
+def test_push_queues_only_committed_notifications(client, db_session, setup, monkeypatch):
+    from app.models.notification import Notification
+    from app.services.push_service import PushService
+    queued=[]
+    monkeypatch.setattr(PushService,'enqueue',staticmethod(lambda ids: queued.extend(ids)))
+    row=Notification(user_id='patient',tenant_id='a',title='Prueba',message='Mensaje',type='SISTEMA')
+    db_session.add(row)
+    db_session.flush()
+    assert queued==[]
+    db_session.rollback()
+    assert queued==[]
+    row=Notification(user_id='patient',tenant_id='a',title='Prueba',message='Mensaje',type='SISTEMA')
+    db_session.add(row)
+    db_session.commit()
+    assert queued==[row.id]
+
+
+def test_unregister_token_never_removes_another_accounts_device(client, db_session, setup):
+    from app.models.ai_nutrition import DeviceToken
+    db_session.add(DeviceToken(user_id='patient',token='patient-device-token',platform='android'))
+    db_session.commit()
+    path='/api/v1/automation/device-tokens/unregister'
+    assert client.post(path,headers=auth('other'),json={'token':'patient-device-token'}).status_code==200
+    assert db_session.query(DeviceToken).count()==1
+    assert client.post(path,headers=auth('patient'),json={'token':'patient-device-token'}).status_code==200
+    assert db_session.query(DeviceToken).count()==0
+
+
+def test_push_payload_targets_owner_and_includes_unread_badge(db_session, setup, monkeypatch):
+    import firebase_admin
+    from firebase_admin import messaging
+    import app.database as database
+    from sqlalchemy.orm import sessionmaker
+    from app.models.notification import Notification
+    from app.models.ai_nutrition import DeviceToken
+    from app.services.push_service import PushService
+    monkeypatch.setattr(PushService,'enqueue',staticmethod(lambda _: None))
+    db_session.add_all([DeviceToken(user_id='patient',token='owner-token',platform='android'),
+                        DeviceToken(user_id='other',token='other-token',platform='android')])
+    row=Notification(user_id='patient',tenant_id='a',title='Pago recibido',message='USD 5 wallet',type='PAGO')
+    db_session.add(row)
+    db_session.commit()
+    monkeypatch.setattr(database,'get_session_local',lambda: sessionmaker(bind=db_session.bind))
+    monkeypatch.setattr(firebase_admin,'get_app',lambda name: object())
+    messages=[]
+    monkeypatch.setattr(messaging,'send',lambda message,app=None: messages.append(message))
+    PushService.deliver([row.id])
+    assert len(messages)==1
+    sent=messages[0]
+    assert sent.token=='owner-token'
+    assert sent.notification.title=='Pago recibido'
+    assert sent.data['unread_count']=='1'
+    assert sent.android.notification.notification_count==1
+    assert sent.apns.payload.aps.badge==1

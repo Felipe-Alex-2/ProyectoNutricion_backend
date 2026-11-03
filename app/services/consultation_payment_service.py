@@ -1,7 +1,7 @@
 """Accepted appointments cost USD 5. Wallet entries are immutable and atomic."""
 from datetime import datetime, timezone
 from decimal import Decimal
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 from fastapi import HTTPException
 from sqlalchemy import func
 from app.models.appointment import Appointment
@@ -52,7 +52,7 @@ class ConsultationPaymentService:
                 return {'payment_id': payment.id, 'paypal_order_id': payment.paypal_order_id, 'approval_url': approval}
             order = PayPalService.create_order(amount=payment.amount, currency='USD',
                 description=payment.concept, return_url=return_url, cancel_url=return_url,
-                request_id=payment.id)
+                request_id=str(uuid5(NAMESPACE_URL, f'checkout:{payment.id}:{payment.notes or chr(32)}')))
         except Exception:
             raise HTTPException(502, detail='No se pudo abrir PayPal. Intenta nuevamente; no se ha acreditado ningún pago.')
         payment.paypal_order_id = order['order_id']
@@ -140,13 +140,43 @@ class ConsultationPaymentService:
             if ConsultationPaymentService.balance(db, user.id) < Decimal('5'):
                 raise HTTPException(400, detail='Saldo insuficiente. Recarga tu wallet desde Perfil.')
             db.add(WalletMovement(user_id=user.id, tenant_id=payment.tenant_id, branch_id=payment.branch_id,
-                payment_id=payment.id, amount=Decimal('-5'), concept='Pago de consulta general'))
+                payment_id=payment.id, amount=Decimal('-5'), concept='Pago de consulta general con wallet'))
         else:
             payment.cashier_id = user.id
         payment.payment_method = method
         ConsultationPaymentService.complete(db, payment, appointment)
         db.commit()
         return {'payment_id': payment.id, 'status': 'COMPLETED'}
+
+    @staticmethod
+    def cancel_choice(db, user, appointment_id):
+        from app.core.authorization import require_role
+        require_role(user, {'CLIENTE'})
+        appointment = db.query(Appointment).filter_by(id=appointment_id).with_for_update(of=Appointment).first()
+        if not appointment or appointment.patient_id != user.id:
+            raise HTTPException(404, detail='Cita no encontrada.')
+        payment = db.query(Payment).filter_by(appointment_id=appointment.id).with_for_update(of=Payment).first()
+        if not payment or payment.status != 'PENDING' or appointment.status != 'ACCEPTED' or payment.cashier_id:
+            raise HTTPException(409, detail='Solo puedes cambiar un pago pendiente de tu cita.')
+        if payment.paypal_order_id:
+            try:
+                order = PayPalService.get_order(payment.paypal_order_id)
+            except Exception:
+                raise HTTPException(502, detail='No se pudo comprobar PayPal. Intenta nuevamente antes de cambiar de método.')
+            if order.get('status') in {'APPROVED', 'COMPLETED'}:
+                # Approval may have happened in another browser; settle the original
+                # order instead of allowing a second charge from another method.
+                ConsultationPaymentService.capture(db, payment)
+                return {'status': 'COMPLETED', 'payment_id': payment.id}
+            if order.get('status') not in {'CREATED', 'PAYER_ACTION_REQUIRED', 'VOIDED'}:
+                raise HTTPException(409, detail='Esta orden no permite cambiar de método. Verifica el pago.')
+            # Orders with intent CAPTURE have no cancel API. Retire the local
+            # reference: old approvals cannot be captured by any application route.
+            payment.notes = (payment.notes or '') + f'\nOrden sin capturar descartada: {payment.paypal_order_id}'
+            payment.paypal_order_id = None
+        payment.payment_method = 'PENDING'
+        db.commit()
+        return {'status': 'PENDING', 'payment_id': payment.id}
 
     @staticmethod
     def complete(db, payment, appointment=None):
@@ -157,8 +187,12 @@ class ConsultationPaymentService:
             from app.models.notification import Notification
             db.add(Notification(user_id=payment.patient_id, tenant_id=payment.tenant_id,
                 branch_id=payment.branch_id, title='Cita confirmada', type='CITA_CONFIRMADA',
-                reference_id=appointment.id, message='Recibimos el pago de USD 5 de tu consulta general. Tu cita está confirmada.'))
+                reference_id=appointment.id, message=f'Pago de consulta general: USD 5.00 con {payment.payment_method}. Tu cita está confirmada. Puedes ver el recibo en tus comprobantes.'))
         if payment.purpose == 'WALLET_TOPUP':
+            from app.models.notification import Notification
+            db.add(Notification(user_id=payment.patient_id, tenant_id=payment.tenant_id,
+                branch_id=payment.branch_id, title='Recarga de wallet confirmada', type='PAGO',
+                reference_id=payment.id, message=f'Se acreditaron USD {payment.amount:.2f} en tu wallet. Tu comprobante está disponible en Perfil > Wallet.'))
             db.add(WalletMovement(user_id=payment.patient_id, tenant_id=payment.tenant_id,
                 branch_id=payment.branch_id, payment_id=payment.id, amount=Decimal(str(payment.amount)), concept=payment.concept))
 

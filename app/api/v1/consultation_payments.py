@@ -72,3 +72,8 @@ def pay(appointment_id: str, body: Pay, request: Request,
         db: Session = Depends(get_db), user=Depends(get_current_user)):
     return_url = mobile_return_url(request) if body.mobile else settings.FRONTEND_URL.rstrip('/') + '/paypal-return'
     return Service.pay(db, user, appointment_id, body.method, return_url)
+
+
+@router.post('/appointments/{appointment_id}/cancel-payment-choice')
+def cancel_payment_choice(appointment_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    return Service.cancel_choice(db, user, appointment_id)
