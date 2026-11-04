@@ -348,7 +348,7 @@ class ReportService:
         elements.append(
             Paragraph(
                 f"Emitido: {report.generated_at.strftime('%Y-%m-%d %H:%M UTC')} | "
-                f"Total de registros: {report.total_rows} | Sistema Multi-Tenant NutriSalud",
+                f"Total de registros: {report.total_rows} | NutriSalud",
                 meta_style,
             )
         )

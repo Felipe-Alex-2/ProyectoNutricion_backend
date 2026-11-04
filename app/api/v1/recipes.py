@@ -1,12 +1,13 @@
 from app.core.authorization import require_patient_access, require_tenant
 """Endpoints de recetas nutricionales y planes de alimentación."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
+from app.core.offline_idempotency import operation_id
 from app.models.recipe import Recipe, RecipeAssignment
 from app.models.activity_log import ActivityLog
 from app.schemas.recipe import RecipeCreate, RecipeUpdate, RecipeResponse
@@ -80,6 +81,7 @@ def create_recipe(
     data: RecipeCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(None, max_length=128),
 ):
     """Crear una nueva receta en la plataforma Web y asignarla a uno o más pacientes."""
     if current_user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
@@ -93,6 +95,17 @@ def create_recipe(
     require_tenant(current_user, tenant_id)
     for patient_id in data.assigned_patient_ids or []:
         require_patient_access(db, current_user, patient_id)
+
+    stable_id = operation_id(db, current_user.id, 'recipe', idempotency_key)
+    existing = db.get(Recipe, stable_id) if stable_id else None
+    if existing:
+        expected = data.model_dump(exclude={'tenant_id', 'assigned_patient_ids'})
+        expected['title'] = data.title.strip()
+        if (existing.tenant_id != tenant_id or
+            any(getattr(existing, k) != v for k, v in expected.items()) or
+            set(a.patient_id for a in existing.assignments) != set(data.assigned_patient_ids or [])):
+            raise HTTPException(409, 'Este identificador ya pertenece a otra receta.')
+        return _recipe_to_response(existing)
 
     # Validar que no se repita el nombre de la receta dentro del mismo tenant
     clean_title = data.title.strip()
@@ -112,6 +125,7 @@ def create_recipe(
         )
 
     recipe = Recipe(
+        **({"id": stable_id} if stable_id else {}),
         tenant_id=tenant_id,
         created_by=current_user.id,
         title=clean_title,

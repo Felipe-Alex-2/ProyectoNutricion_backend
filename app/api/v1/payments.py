@@ -3,7 +3,7 @@ Point-of-Sale Payments Router (Caja y Cobros con PayPal Sandbox).
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ def create_pos_payment(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    idempotency_key: Optional[str] = Header(None, max_length=128),
 ):
     require_role(current_user, STAFF_ROLES)
     require_tenant(current_user, body.tenant_id)
@@ -46,6 +47,7 @@ def create_pos_payment(
         cashier=current_user,
         data=body,
         frontend_url=frontend_url,
+        idempotency_key=idempotency_key,
     )
 
 

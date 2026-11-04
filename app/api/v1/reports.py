@@ -196,3 +196,30 @@ def delete_saved_report(report_id: str, current_user: User = Depends(get_current
     from app.services.generated_report_service import GeneratedReportService
     ensure_staff(current_user)
     db.delete(GeneratedReportService.get(db,current_user,report_id));db.commit()
+
+
+@router.get('/mine', response_model=ReportQueryResponse)
+def my_report(entity: str = Query('food', pattern='^(food|appointments|payments|subscriptions)$'),
+              start_date: str = Query(None), end_date: str = Query(None),
+              current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.personal_reports_service import PersonalReportsService
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
+        end = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
+        if start and end and start > end: raise ValueError('La fecha inicial no puede superar la final.')
+    except ValueError:
+        raise HTTPException(422, detail='Revisa el rango de fechas (YYYY-MM-DD).')
+    return PersonalReportsService.generate(db, current_user, entity, start, end)
+
+
+@router.get('/mine/export')
+def export_my_report(entity: str = Query('food', pattern='^(food|appointments|payments|subscriptions)$'),
+                     file_format: str = Query('pdf', pattern='^(pdf|excel)$'),
+                     start_date: str = Query(None), end_date: str = Query(None),
+                     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    report = my_report(entity, start_date, end_date, current_user, db)
+    stream = ReportService.generate_pdf(report) if file_format == 'pdf' else ReportService.generate_excel(report)
+    extension = 'pdf' if file_format == 'pdf' else 'xlsx'
+    mime = 'application/pdf' if file_format == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return StreamingResponse(stream, media_type=mime,
+        headers={'Content-Disposition': f'attachment; filename="Mi_reporte_{entity}.{extension}"'})

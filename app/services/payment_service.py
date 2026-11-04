@@ -15,6 +15,7 @@ from fastapi import HTTPException, status
 from app.models.payment import Payment, cash_register_filter
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.core.offline_idempotency import operation_id
 from app.schemas.payment import (
     PaymentCreate,
     PaymentOrderCreatedOut,
@@ -60,6 +61,7 @@ class PaymentService:
         cashier: User,
         data: PaymentCreate,
         frontend_url: str = "http://localhost:4200",
+        idempotency_key: Optional[str] = None,
     ) -> PaymentOrderCreatedOut:
         """Create a payment record (either immediate EFECTIVO or PENDING PayPal order)."""
         # 1. Verify tenant exists
@@ -74,10 +76,27 @@ class PaymentService:
         branch_id = operation_branch(db, data.tenant_id, data.branch_id, cashier.branch_id if cashier.tenant_id == data.tenant_id else None)
         method = (data.payment_method or "PAYPAL").upper()
 
+        if idempotency_key and method != "EFECTIVO":
+            raise HTTPException(422, 'Solo se pueden sincronizar cobros en efectivo.')
+        stable_id = operation_id(db, cashier.id, 'cash', idempotency_key)
+        existing = db.get(Payment, stable_id) if stable_id else None
+        if existing:
+            expected = dict(tenant_id=data.tenant_id, branch_id=branch_id,
+                customer_name=data.customer_name, customer_email=data.customer_email,
+                concept=data.concept, amount=round(data.amount, 2), currency=data.currency,
+                notes=data.notes, payment_method=method)
+            if any(getattr(existing, k) != v for k, v in expected.items()):
+                raise HTTPException(409, 'Este identificador ya pertenece a otro cobro.')
+            return PaymentOrderCreatedOut(payment_id=existing.id, paypal_order_id=None,
+                approval_url=None, payment_method=method, amount=existing.amount,
+                currency=existing.currency, concept=existing.concept,
+                customer_name=existing.customer_name)
+
         # 2. If Cash (EFECTIVO), record directly as COMPLETED without calling PayPal
         if method == "EFECTIVO":
             now = datetime.now(timezone.utc)
             payment = Payment(
+                **({"id": stable_id} if stable_id else {}),
                 tenant_id=data.tenant_id,
                 branch_id=branch_id,
                 cashier_id=cashier.id,

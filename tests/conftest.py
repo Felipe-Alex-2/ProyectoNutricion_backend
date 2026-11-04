@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-os.environ.update(DATABASE_URL='sqlite://', ENVIRONMENT='test', SECRET_KEY='isolated-test-key-at-least-32-characters', BACKUP_ENCRYPTION_KEY='isolated-test-backup-key', SMTP_HOST='', GEMINI_API_KEY='', PAYPAL_CLIENT_ID='', PAYPAL_CLIENT_SECRET='')
+os.environ.update(DATABASE_URL='sqlite://', ENVIRONMENT='test', SECRET_KEY='isolated-test-key-at-least-32-characters', BACKUP_ENCRYPTION_KEY='isolated-test-backup-key', SMTP_HOST='', GEMINI_API_KEY='', PAYPAL_CLIENT_ID='', PAYPAL_CLIENT_SECRET='', FIREBASE_PROJECT_ID='', FIREBASE_CLIENT_EMAIL='', FIREBASE_PRIVATE_KEY='')
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.database import Base, get_db
 from app.main import app

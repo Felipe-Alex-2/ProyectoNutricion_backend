@@ -3,7 +3,8 @@ from typing import List, Optional
 import hashlib
 import json
 import uuid
-from fastapi import Form, Query
+from fastapi import Form, Query, Header
+from app.core.offline_idempotency import operation_id
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -26,6 +27,7 @@ async def analyze_food_photo(
     patient_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    idempotency_key: Optional[str] = Header(None, max_length=128),
 ):
     """
     Sube una fotografía de plato de comida y recibe la estimación nutricional automática
@@ -54,6 +56,15 @@ async def analyze_food_photo(
     else:
         raise HTTPException(status_code=400, detail="La imagen no tiene un formato válido (JPG, PNG, WebP, HEIC).")
 
+    stable_id = operation_id(db, current_user.id, 'photo', idempotency_key)
+    fingerprint = hashlib.sha256(target_id.encode() + contents).hexdigest()
+    existing = db.get(FoodRecord, stable_id) if stable_id else None
+    if existing:
+        stored = json.loads(existing.result_json)
+        if stored.get('_request_fingerprint') != fingerprint:
+            raise HTTPException(409, 'Este identificador ya pertenece a otra foto.')
+        return FoodAnalysisResponse.model_validate(stored['_analysis_response'])
+
     try:
         result = await run_in_threadpool(FoodVisionService.analyze_food_image,
             db=db,
@@ -61,6 +72,8 @@ async def analyze_food_photo(
             image_bytes=contents,
             mime_type=mime,
             image_url=file.filename,
+            record_id=stable_id,
+            request_fingerprint=fingerprint if stable_id else None,
         )
         return result
     except ValueError as e:

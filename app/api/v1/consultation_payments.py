@@ -77,3 +77,24 @@ def pay(appointment_id: str, body: Pay, request: Request,
 @router.post('/appointments/{appointment_id}/cancel-payment-choice')
 def cancel_payment_choice(appointment_id: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
     return Service.cancel_choice(db, user, appointment_id)
+
+
+@router.get('/my-receipts')
+def my_receipts(limit: int = 50, offset: int = 0, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    from app.models.payment import Payment
+    from app.models.subscription_receipt import SubscriptionReceipt
+    if limit < 1 or limit > 100 or offset < 0:
+        raise HTTPException(422, detail='Paginación inválida.')
+    payments = db.query(Payment).filter_by(patient_id=user.id, cashier_id=None, status='COMPLETED').order_by(Payment.paid_at.desc()).limit(offset + limit).all()
+    subscriptions = db.query(SubscriptionReceipt).filter_by(user_id=user.id).order_by(SubscriptionReceipt.paid_at.desc()).limit(offset + limit).all()
+    rows = [dict(id=p.id, kind='WALLET_TOPUP' if p.purpose == 'WALLET_TOPUP' else 'CONSULTATION',
+                 concept=p.concept, amount=p.amount, currency=p.currency, method=p.payment_method,
+                 buyer_name=p.customer_name, buyer_email=p.customer_email, paid_at=p.paid_at,
+                 reference=p.paypal_capture_id or p.id, pdf_path=f'/payments/{p.id}/pdf') for p in payments]
+    rows += [dict(id=s.id, kind='SUBSCRIPTION', concept='Suscripción Premium IA · 30 días' if s.plan_name == 'CLIENTE_PREMIUM' else f'Suscripción {s.plan_name}',
+                  amount=float(s.amount), currency=s.currency, method='PAYPAL', buyer_name=s.buyer_name,
+                  buyer_email=s.buyer_email, paid_at=s.paid_at, reference=s.paypal_capture_id,
+                  pdf_path=f'/subscriptions/receipts/{s.id}/pdf') for s in subscriptions]
+    # Dates from SQLite may be naive while Postgres returns aware timestamps.
+    rows.sort(key=lambda r: r['paid_at'].isoformat() if r['paid_at'] else '', reverse=True)
+    return rows[offset:offset + limit]

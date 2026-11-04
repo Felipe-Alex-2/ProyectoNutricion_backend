@@ -29,6 +29,8 @@ class FoodVisionService:
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
         image_url: Optional[str] = None,
+        record_id: Optional[str] = None,
+        request_fingerprint: Optional[str] = None,
     ) -> FoodAnalysisResponse:
         """
         Envía la foto a Gemini multimodal, parsea macronutrientes,
@@ -113,6 +115,7 @@ class FoodVisionService:
 
         # 4. Almacenar registro en la BD
         record = FoodRecord(
+            **({"id": record_id} if record_id else {}),
             patient_id=patient_id,
             image_url=image_url,
             result_json=json.dumps(analysis_data, ensure_ascii=False),
@@ -126,10 +129,9 @@ class FoodVisionService:
             created_at=datetime.now(timezone.utc),
         )
         db.add(record)
-        db.commit()
-        db.refresh(record)
+        db.flush()
 
-        return FoodAnalysisResponse(
+        response = FoodAnalysisResponse(
             record_id=record.id,
             alimentos=alimentos_list,
             total=totals,
@@ -139,6 +141,13 @@ class FoodVisionService:
             image_url=image_url,
             created_at=record.created_at,
         )
+        if request_fingerprint:
+            analysis_data['_request_fingerprint'] = request_fingerprint
+            analysis_data['_analysis_response'] = response.model_dump(mode='json')
+            record.result_json = json.dumps(analysis_data, ensure_ascii=False)
+        db.commit()
+        return response
+
 
     @classmethod
     def get_patient_food_history(

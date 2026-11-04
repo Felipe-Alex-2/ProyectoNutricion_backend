@@ -63,3 +63,7 @@ Los bloqueos de consulta, pago y saldo indican explícitamente la tabla (`FOR UP
 - Las notificaciones de recarga, pago de cita y suscripción Premium se guardan junto a la operación. El envío FCM se encola después del commit; los fallos de push no revierten pagos.
 
 Para activar Firebase y probar avisos con Android cerrado sigue **mobile/docs/NOTIFICACIONES_PUSH.md** en el repositorio raíz del proyecto.
+
+## Comprobantes de todos los pagos mobile
+
+Perfil > Mis comprobantes y Suscripciones > Mis comprobantes de pago consultan GET /api/v1/my-receipts. Unifica consultas y recargas COMPLETED del cliente con los recibos históricos de suscripciones. Cada operación conserva su propio concepto, importe, moneda, método, fecha, comprador y referencia, además del enlace autenticado a su PDF existente. La paginación combina los dos orígenes por fecha; no muestra órdenes pendientes ni cobros POS de caja web. Los pagos de suscripción conservan el comprobante aunque la membresía ya haya terminado o se haya cancelado.
