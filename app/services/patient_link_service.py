@@ -114,6 +114,9 @@ class PatientLinkService:
         if link.tenant_id and not patient.tenant_id:
             patient.tenant_id = link.tenant_id
 
+        if link.branch_id and not patient.branch_id and patient.tenant_id == link.tenant_id:
+            patient.branch_id = link.branch_id
+
         db.commit()
         db.refresh(link)
 

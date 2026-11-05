@@ -24,7 +24,7 @@ router = APIRouter(prefix="/reports", tags=["Reportes Dinámicos"])
 
 
 def ensure_staff(user: User):
-    if user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA"]:
+    if user.role_id not in ["SUPERADMIN", "ADMIN_ORGANIZATION", "NUTRICIONISTA", "CLIENTE"]:
         raise ForbiddenException("No tienes permisos para acceder al módulo de reportes dinámicos.")
 
 
@@ -34,6 +34,15 @@ def get_reportable_entities(
 ):
     ensure_staff(current_user)
     return ReportService.get_available_entities()
+
+
+@router.get("/scope")
+def report_scope(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ensure_staff(current_user)
+    from app.services.report_analytics_service import ReportAnalyticsService
+    companies, branches = ReportAnalyticsService.scope(db, current_user, ReportQueryRequest(entity='patients'))
+    return {'companies': [{'id': c.id, 'name': c.name} for c in companies],
+            'branches': [{'id': b.id, 'name': b.name, 'tenant_id': b.tenant_id} for b in branches]}
 
 
 @router.post("/query", response_model=ReportQueryResponse)
@@ -223,3 +232,13 @@ def export_my_report(entity: str = Query('food', pattern='^(food|appointments|pa
     mime = 'application/pdf' if file_format == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     return StreamingResponse(stream, media_type=mime,
         headers={'Content-Disposition': f'attachment; filename="Mi_reporte_{entity}.{extension}"'})
+
+
+@router.get('/saved/{report_id}/export')
+def export_saved_report(report_id: str, file_format: str = Query('pdf', pattern='^(pdf|excel)$'),
+                        current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    report = ReportQueryResponse.model_validate(get_saved_report(report_id, current_user, db))
+    stream = ReportService.generate_pdf(report) if file_format == 'pdf' else ReportService.generate_excel(report)
+    extension = 'pdf' if file_format == 'pdf' else 'xlsx'
+    mime = 'application/pdf' if file_format == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return StreamingResponse(stream, media_type=mime, headers={'Content-Disposition': f'attachment; filename="Reporte_guardado.{extension}"'})

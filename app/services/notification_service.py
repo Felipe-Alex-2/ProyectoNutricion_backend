@@ -13,9 +13,11 @@ class NotificationService:
         type: str = "SISTEMA",
         reference_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        branch_id: Optional[str] = None,
     ) -> Notification:
         notification = Notification(
             user_id=user_id,
+            branch_id=branch_id,
             tenant_id=tenant_id,
             title=title,
             message=message,

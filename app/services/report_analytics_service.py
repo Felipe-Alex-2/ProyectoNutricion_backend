@@ -24,11 +24,11 @@ LABELS={'patients':'clientes registrados','payments':'cobros','appointments':'ci
 class ReportAnalyticsService:
     @staticmethod
     def scope(db, actor, req):
-        require_role(actor,STAFF_ROLES)
+        require_role(actor,STAFF_ROLES | {"CLIENTE"})
         requested=set(req.tenant_ids or ([req.tenant_id] if req.tenant_id else []))
         from app.core.workspace import current
         workspace = current(db)
-        if workspace and workspace.tenant_id:
+        if workspace and workspace.staff and workspace.tenant_id:
             if requested and requested != {workspace.tenant_id}: raise ForbiddenException('Cambia al espacio global para comparar empresas.')
             requested = {workspace.tenant_id}
             if workspace.branch_id and req.branch_ids and set(req.branch_ids) != {workspace.branch_id}:
@@ -43,7 +43,7 @@ class ReportAnalyticsService:
         if requested and {c.id for c in companies}!=requested:raise BadRequestException('Alguna empresa seleccionada no existe.')
         company_ids=[c.id for c in companies]
         branches=db.query(Branch).filter(Branch.tenant_id.in_(company_ids)).all()
-        if workspace and workspace.branch_id: branches = [b for b in branches if b.id == workspace.branch_id]
+        if workspace and workspace.staff and workspace.branch_id: branches = [b for b in branches if b.id == workspace.branch_id]
         if req.branch_ids and not set(req.branch_ids)<={b.id for b in branches}:raise ForbiddenException('Alguna sucursal no pertenece al alcance autorizado.')
         return companies,branches
 

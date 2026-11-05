@@ -24,7 +24,7 @@ class GeneratedReportService:
             company = actor.tenant_id
             require_tenant(actor, company)
         if company: query = query.filter(GeneratedReport.tenant_id == company)
-        if actor.role_id == 'NUTRICIONISTA': query = query.filter(GeneratedReport.created_by == actor.id)
+        if actor.role_id in {'NUTRICIONISTA', 'CLIENTE'}: query = query.filter(GeneratedReport.created_by == actor.id)
         return query.order_by(GeneratedReport.created_at.desc()).limit(100).all()
 
     @staticmethod
@@ -32,5 +32,5 @@ class GeneratedReportService:
         row = db.query(GeneratedReport).filter(GeneratedReport.id == report_id).first()
         if not row: raise NotFoundException('Reporte no encontrado.')
         require_tenant(actor, row.tenant_id)
-        if actor.role_id == 'NUTRICIONISTA' and row.created_by != actor.id: raise ForbiddenException('El reporte pertenece a otro especialista.')
+        if actor.role_id in {'NUTRICIONISTA', 'CLIENTE'} and row.created_by != actor.id: raise ForbiddenException('El reporte pertenece a otro especialista.')
         return row

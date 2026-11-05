@@ -17,7 +17,7 @@ class AppointmentService:
     def create_appointment(db: Session, current_user: User, data: AppointmentCreate, idempotency_key: Optional[str] = None) -> AppointmentOut:
         # Serialize schedules for both participants on PostgreSQL. A retry returns the same record.
         participants = db.query(User).filter(User.id.in_([current_user.id, data.nutritionist_id])).order_by(User.id).with_for_update().all()
-        nutritionist = next((user for user in participants if user.id == data.nutritionist_id and user.role_id == "NUTRICIONISTA" and user.is_active), None)
+        nutritionist = next((user for user in participants if user.id == data.nutritionist_id and user.role_id in {"NUTRICIONISTA", "SUPERADMIN"} and user.is_active), None)
         if not nutritionist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -25,6 +25,12 @@ class AppointmentService:
             )
 
         tenant_id = nutritionist.tenant_id
+        if nutritionist.role_id == "SUPERADMIN":
+            from app.models.patient_link import PatientNutritionistLink
+            link = db.query(PatientNutritionistLink).filter_by(patient_id=current_user.id, nutritionist_id=nutritionist.id, status="LINKED").order_by(PatientNutritionistLink.linked_at.desc()).first()
+            if not link:
+                raise HTTPException(403, "Debes vincularte con este especialista antes de agendar.")
+            tenant_id = link.tenant_id
         require_tenant(current_user, tenant_id)
         if data.tenant_id is not None and data.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail="La clínica no coincide con el especialista.")
@@ -108,6 +114,7 @@ class AppointmentService:
             type="CITA_CREADA",
             reference_id=appointment.id,
             tenant_id=tenant_id,
+            branch_id=appointment.branch_id,
         )
 
         # 2. Notificar a los administradores de la organización
@@ -131,6 +138,7 @@ class AppointmentService:
                     type="CITA_CREADA",
                     reference_id=appointment.id,
                     tenant_id=tenant_id,
+                    branch_id=appointment.branch_id,
                 )
 
         return AppointmentService._to_out(appointment)
@@ -236,6 +244,7 @@ class AppointmentService:
             type="CITA_ACEPTADA",
             reference_id=appointment.id,
             tenant_id=appointment.tenant_id,
+            branch_id=appointment.branch_id,
         )
 
         return AppointmentService._to_out(appointment)
@@ -292,6 +301,7 @@ class AppointmentService:
                 type="CITA_CANCELADA",
                 reference_id=appointment.id,
                 tenant_id=appointment.tenant_id,
+                branch_id=appointment.branch_id,
             )
         else:
             # Si canceló el paciente -> notificar al nutri
@@ -303,6 +313,7 @@ class AppointmentService:
                 type="CITA_CANCELADA",
                 reference_id=appointment.id,
                 tenant_id=appointment.tenant_id,
+                branch_id=appointment.branch_id,
             )
 
         return AppointmentService._to_out(appointment)
@@ -315,11 +326,13 @@ class AppointmentService:
     ) -> List[NutritionistOut]:
         target_tenant = tenant_id or current_user.tenant_id
         require_tenant(current_user, target_tenant)
-        query = db.query(User).filter(User.role_id == "NUTRICIONISTA", User.is_active == True)
-        if target_tenant:
-            query = query.filter(User.tenant_id == target_tenant)
-        elif current_user.role_id != "SUPERADMIN":
-            query = query.filter(User.tenant_id == current_user.tenant_id)
+        from sqlalchemy import or_, and_
+        from app.models.patient_link import PatientNutritionistLink
+        linked_admins = db.query(PatientNutritionistLink.nutritionist_id).filter_by(patient_id=current_user.id, status="LINKED", tenant_id=target_tenant)
+        specialist = User.role_id == "NUTRICIONISTA"
+        if target_tenant or current_user.role_id != "SUPERADMIN":
+            specialist = and_(specialist, User.tenant_id == target_tenant)
+        query = db.query(User).filter(User.is_active == True, or_(specialist, and_(User.role_id == "SUPERADMIN", User.id.in_(linked_admins))))
 
         nutritionists = query.all()
         return [

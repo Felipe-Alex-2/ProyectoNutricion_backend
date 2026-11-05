@@ -48,7 +48,7 @@ def test_free_account_reports_are_private_and_exportable(client, personal):
         assert response.status_code==200,response.text
         assert response.json()['total_rows']==expected
         assert 'other' not in json.dumps(response.json())
-    assert client.get('/api/v1/reports/entities',headers=auth('owner')).status_code==403
+    assert client.get('/api/v1/reports/entities',headers=auth('owner')).status_code==200
     assert client.get('/api/v1/reports/mine?entity=patients',headers=auth('owner')).status_code==422
     assert client.get('/api/v1/reports/mine?start_date=invalid',headers=auth('owner')).status_code==422
     assert client.get('/api/v1/reports/mine?start_date=2026-11-04&end_date=2026-11-03',headers=auth('owner')).status_code==422
