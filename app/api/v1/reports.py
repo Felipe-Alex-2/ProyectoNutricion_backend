@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -28,16 +28,35 @@ def ensure_staff(user: User):
         raise ForbiddenException("No tienes permisos para acceder al módulo de reportes dinámicos.")
 
 
+
+def report_user(current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+                report_client: str = Header('', alias='X-Report-Client')):
+    """Mobile reports deliberately provide the global report catalog to all roles.
+
+    This capability is restricted to this reporting router; it grants no account,
+    clinical editing, payment, or workspace management privileges.
+    """
+    if report_client != 'mobile':
+        return current_user
+    ensure_staff(current_user)
+    from types import SimpleNamespace
+    from app.core.workspace import Workspace
+    actor = SimpleNamespace(**{c.name: getattr(current_user, c.name) for c in User.__table__.columns})
+    actor.role_id = 'SUPERADMIN'
+    actor._mobile_reports = True
+    db.info['workspace'] = Workspace(current_user.id, None, None, True, True)
+    return actor
+
 @router.get("/entities", response_model=List[ReportEntityMeta])
 def get_reportable_entities(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
 ):
     ensure_staff(current_user)
     return ReportService.get_available_entities()
 
 
 @router.get("/scope")
-def report_scope(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def report_scope(current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     ensure_staff(current_user)
     from app.services.report_analytics_service import ReportAnalyticsService
     companies, branches = ReportAnalyticsService.scope(db, current_user, ReportQueryRequest(entity='patients'))
@@ -48,7 +67,7 @@ def report_scope(current_user: User = Depends(get_current_user), db: Session = D
 @router.post("/query", response_model=ReportQueryResponse)
 def query_report(
     request: ReportQueryRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
     db: Session = Depends(get_db),
 ):
     ensure_staff(current_user)
@@ -66,7 +85,7 @@ def query_report(
 @router.post("/voice-command", response_model=VoiceReportCommandResponse)
 def execute_voice_report_command(
     request: VoiceReportCommandRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -98,7 +117,7 @@ def execute_voice_report_command(
 @router.post("/voice-summary", response_model=VoiceReportSummaryResponse)
 def generate_voice_summary(
     request: VoiceReportSummaryRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
 ):
     """
     Genera una síntesis ejecutiva hablada con Gemini API a partir de los datos del reporte para ser locutada por voz (TTS).
@@ -115,7 +134,7 @@ def generate_voice_summary(
 @router.post("/export/excel")
 def export_report_excel(
     request: ReportQueryRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
     db: Session = Depends(get_db),
 ):
     ensure_staff(current_user)
@@ -149,7 +168,7 @@ def export_report_excel(
 @router.post("/export/pdf")
 def export_report_pdf(
     request: ReportQueryRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(report_user),
     db: Session = Depends(get_db),
 ):
     ensure_staff(current_user)
@@ -181,27 +200,27 @@ def export_report_pdf(
 
 
 @router.get('/saved')
-def saved_reports(tenant_id: str = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def saved_reports(tenant_id: str = None, current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     from app.services.generated_report_service import GeneratedReportService
     ensure_staff(current_user)
     return [{'id':r.id,'tenant_id':r.tenant_id,'title':r.title,'entity':r.entity,'created_at':r.created_at} for r in GeneratedReportService.list(db,current_user,tenant_id)]
 
 @router.post('/saved', status_code=201)
-def save_report(request: ReportQueryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def save_report(request: ReportQueryRequest, current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     from app.services.generated_report_service import GeneratedReportService
     ensure_staff(current_user)
     report = GeneratedReportService.save(db,request,current_user)
     return {'id':report.id,'title':report.title,'created_at':report.created_at}
 
 @router.get('/saved/{report_id}')
-def get_saved_report(report_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_saved_report(report_id: str, current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     import json
     from app.services.generated_report_service import GeneratedReportService
     ensure_staff(current_user)
     return json.loads(GeneratedReportService.get(db,current_user,report_id).snapshot_json)
 
 @router.delete('/saved/{report_id}', status_code=204)
-def delete_saved_report(report_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_saved_report(report_id: str, current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     from app.services.generated_report_service import GeneratedReportService
     ensure_staff(current_user)
     db.delete(GeneratedReportService.get(db,current_user,report_id));db.commit()
@@ -210,7 +229,7 @@ def delete_saved_report(report_id: str, current_user: User = Depends(get_current
 @router.get('/mine', response_model=ReportQueryResponse)
 def my_report(entity: str = Query('food', pattern='^(food|appointments|payments|subscriptions)$'),
               start_date: str = Query(None), end_date: str = Query(None),
-              current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+              current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     from app.services.personal_reports_service import PersonalReportsService
     try:
         start = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
@@ -225,7 +244,7 @@ def my_report(entity: str = Query('food', pattern='^(food|appointments|payments|
 def export_my_report(entity: str = Query('food', pattern='^(food|appointments|payments|subscriptions)$'),
                      file_format: str = Query('pdf', pattern='^(pdf|excel)$'),
                      start_date: str = Query(None), end_date: str = Query(None),
-                     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+                     current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     report = my_report(entity, start_date, end_date, current_user, db)
     stream = ReportService.generate_pdf(report) if file_format == 'pdf' else ReportService.generate_excel(report)
     extension = 'pdf' if file_format == 'pdf' else 'xlsx'
@@ -236,7 +255,7 @@ def export_my_report(entity: str = Query('food', pattern='^(food|appointments|pa
 
 @router.get('/saved/{report_id}/export')
 def export_saved_report(report_id: str, file_format: str = Query('pdf', pattern='^(pdf|excel)$'),
-                        current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+                        current_user: User = Depends(report_user), db: Session = Depends(get_db)):
     report = ReportQueryResponse.model_validate(get_saved_report(report_id, current_user, db))
     stream = ReportService.generate_pdf(report) if file_format == 'pdf' else ReportService.generate_excel(report)
     extension = 'pdf' if file_format == 'pdf' else 'xlsx'

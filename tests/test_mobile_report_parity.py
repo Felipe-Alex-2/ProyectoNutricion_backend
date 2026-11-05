@@ -58,3 +58,23 @@ def test_client_saved_snapshot_exports_and_stays_owned(client,reporting):
         assert response.status_code==200,response.text
         assert response.content.startswith(signature)
     assert client.get(f'/api/v1/reports/saved/{identity}/export',headers=headers('p2')).status_code==403
+
+
+def test_mobile_all_roles_compare_companies_and_export(client,reporting):
+    for who in ['p1','doctor','admin','root']:
+        mobile={**headers(who),'X-Report-Client':'mobile'}
+        scope=client.get('/api/v1/reports/scope',headers=mobile)
+        assert scope.status_code==200,scope.text
+        assert {c['id'] for c in scope.json()['companies']}=={'alpha','beta','empty'}
+        result=client.post('/api/v1/reports/voice-command',headers=mobile,json={'transcript':'Qué empresa tiene más clientes'})
+        assert result.status_code==200,result.text
+        assert len(result.json()['report_data']['rows'])==3
+        request=result.json()['parsed_request']
+        for fmt,signature in [('pdf',b'%PDF'),('excel',b'PK')]:
+            exported=client.post('/api/v1/reports/export/'+fmt,headers=mobile,json=request)
+            assert exported.status_code==200,exported.text[:300]
+            assert exported.content.startswith(signature)
+        saved=client.post('/api/v1/reports/saved',headers=mobile,json=request)
+        assert saved.status_code==201,saved.text
+        downloaded=client.get('/api/v1/reports/saved/'+saved.json()['id']+'/export',headers=mobile)
+        assert downloaded.status_code==200,downloaded.text
