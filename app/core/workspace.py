@@ -142,3 +142,4 @@ def attribute_and_check_writes(db, flush_context, instances):
                     raise ForbiddenException('La empresa y sucursal de una operación guardada no se pueden trasladar.')
         if scope.staff and scope.tenant_id and obj.tenant_id != scope.tenant_id: raise ForbiddenException('El registro pertenece a otra empresa.')
         if scope.staff and scope.branch_id and obj.branch_id != scope.branch_id: raise ForbiddenException('El registro pertenece a otra sucursal.')
+//hola mundo 

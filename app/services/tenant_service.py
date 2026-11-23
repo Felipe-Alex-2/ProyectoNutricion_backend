@@ -65,26 +65,50 @@ class TenantService:
         if existing:
             raise ConflictException(f"Ya existe una sucursal con el codigo '{clean_code}'. No se permite duplicar codigos de sucursales.")
 
-        tenant = Tenant(
-            name=clean_name,
-            code=clean_code,
-            phone=data.phone.strip() if data.phone else None,
-            email=data.email.strip() if data.email else None,
-            address=data.address.strip() if data.address else None,
-            logo_url=data.logo_url.strip() if data.logo_url else None,
-            description=data.description.strip() if data.description else None,
-            is_active=data.is_active,
-            department_code=data.department_code,
-        )
-        db.add(tenant)
-        db.flush()
-        raw_branch_code = data.initial_branch_code.strip().upper()
-        branch_code = f'{clean_code}-PRINCIPAL'[:50] if raw_branch_code == 'PRINCIPAL' and db.query(Branch).filter(func.upper(func.trim(Branch.code)) == 'PRINCIPAL').first() else raw_branch_code
-        branch = Branch(tenant_id=tenant.id, name=data.initial_branch_name.strip(), code=branch_code, address=data.address, province_code=data.initial_province_code, municipality_code=data.initial_municipality_code)
-        db.add(branch); db.flush()
-        administrator.tenant_id = tenant.id; administrator.branch_id = branch.id
-        administrator.session_version = (administrator.session_version or 0) + 1
-        db.add(CompanyAdministrator(tenant_id=tenant.id, user_id=administrator.id))
+        # Disable automatic audit logging during tenant+branch+admin creation
+        # to avoid FK violations (the tenant/branch don't exist yet when
+        # before_flush tries to insert activity_logs referencing them).
+        saved_actor = db.info.pop('audit_actor', None)
+        try:
+            tenant = Tenant(
+                name=clean_name,
+                code=clean_code,
+                phone=data.phone.strip() if data.phone else None,
+                email=data.email.strip() if data.email else None,
+                address=data.address.strip() if data.address else None,
+                logo_url=data.logo_url.strip() if data.logo_url else None,
+                description=data.description.strip() if data.description else None,
+                is_active=data.is_active,
+                department_code=data.department_code,
+            )
+            db.add(tenant)
+            db.flush()
+            raw_branch_code = data.initial_branch_code.strip().upper()
+            branch_code = f'{clean_code}-PRINCIPAL'[:50] if raw_branch_code == 'PRINCIPAL' and db.query(Branch).filter(func.upper(func.trim(Branch.code)) == 'PRINCIPAL').first() else raw_branch_code
+            branch = Branch(tenant_id=tenant.id, name=data.initial_branch_name.strip(), code=branch_code, address=data.address, province_code=data.initial_province_code, municipality_code=data.initial_municipality_code)
+            db.add(branch); db.flush()
+            administrator.tenant_id = tenant.id; administrator.branch_id = branch.id
+            administrator.session_version = (administrator.session_version or 0) + 1
+            db.add(CompanyAdministrator(tenant_id=tenant.id, user_id=administrator.id))
+            db.flush()
+        finally:
+            # Restore the audit actor so the manual log below is attributed.
+            if saved_actor is not None:
+                db.info['audit_actor'] = saved_actor
+
+        # Now that tenant + branch exist in the DB (flushed), create the
+        # audit log safely — the FK references are valid at this point.
+        from app.models.activity_log import ActivityLog
+        db.add(ActivityLog(
+            tenant_id=tenant.id,
+            branch_id=branch.id,
+            user_id=saved_actor.id if saved_actor else None,
+            user_email=saved_actor.email if saved_actor else None,
+            user_name=saved_actor.full_name if saved_actor else None,
+            action='TENANTS_CREADO',
+            description=f'TENANTS_CREADO: tenants · {clean_name[:200]}',
+            category='OPERACIONES',
+        ))
         db.commit()
         db.refresh(tenant)
         tenant.administrator_id = administrator.id
